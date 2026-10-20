@@ -10,15 +10,12 @@ from sklearn.model_selection import StratifiedGroupKFold
 # Descarregar os dois datasets 
 
 # Imagens + metadata
-# path_img = kagglehub.dataset_download("kmader/skin-cancer-mnist-ham10000")
-# print("Imagens:", path_img)
+path_img = kagglehub.dataset_download("kmader/skin-cancer-mnist-ham10000")
+print("Imagens:", path_img)
 
-# # Máscaras de segmentação (referência [12] da proposta)
-# path_seg = kagglehub.dataset_download("tschandl/ham10000-lesion-segmentations")
-# print("Máscaras:", path_seg)
-
-path_img = "C:\\Users\\carol\\.cache\\kagglehub\\datasets\\kmader\\skin-cancer-mnist-ham10000\\versions\\2"
-path_seg = "C:\\Users\\carol\\.cache\\kagglehub\\datasets\\tschandl\\ham10000-lesion-segmentations\\versions\\1"
+# Máscaras de segmentação (referência [12] da proposta)
+path_seg = kagglehub.dataset_download("tschandl/ham10000-lesion-segmentations")
+print("Máscaras:", path_seg)
 
 # Ver o que há nas pastas
 for p in [path_img, path_seg]:
