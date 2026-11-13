@@ -1,0 +1,1 @@
+﻿# Dermoscopy Copilot

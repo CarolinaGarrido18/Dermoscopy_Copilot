@@ -1,2 +1,8 @@
 *.pdf
 /features
+
+
+.venv/
+__pycache__/
+
+/features_*

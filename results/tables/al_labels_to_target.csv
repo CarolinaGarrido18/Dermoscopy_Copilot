@@ -1,0 +1,11 @@
+target,strategy,seeds_reached,median_labels,mean_curve_labels
+90% of full model (F1 >= 0.623),entropy,10/10,1765,1615
+90% of full model (F1 >= 0.623),hybrid,10/10,1615,1615
+90% of full model (F1 >= 0.623),least_confidence,10/10,1765,1615
+90% of full model (F1 >= 0.623),margin,10/10,1765,1915
+90% of full model (F1 >= 0.623),random,10/10,2215,2215
+95% of full model (F1 >= 0.657),entropy,9/10,2965,3115
+95% of full model (F1 >= 0.657),hybrid,10/10,2815,3115
+95% of full model (F1 >= 0.657),least_confidence,10/10,2665,3115
+95% of full model (F1 >= 0.657),margin,10/10,3115,3115
+95% of full model (F1 >= 0.657),random,5/10,>3715,>3715
