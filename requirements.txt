@@ -8,3 +8,5 @@ timm
 pillow
 kagglehub
 tqdm
+scipy
+ipykernel
