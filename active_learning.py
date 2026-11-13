@@ -205,7 +205,7 @@ if __name__ == "__main__":
 
     rows = []
     for name in STRATEGIES:
-        for seed in [0, 1, 2]:
+        for seed in range(10):
             print("running", name, "| seed", seed, flush=True)
             rows += run_experiment(name, seed, d)
 
@@ -213,7 +213,7 @@ if __name__ == "__main__":
     df.to_csv("results/tables/al_curves.csv", index=False)
 
     last = df[df.cycle == df.cycle.max()]
-    print("\nValidation macro F1 at the last cycle (mean and std over 3 seeds):")
+    print("\nValidation macro F1 at the last cycle (mean and std over 10 seeds):")
     print(last.groupby("strategy").val_f1.agg(["mean", "std"]).round(4))
     print("\nMean validation macro F1 over all cycles:")
     print(df.groupby("strategy").val_f1.mean().round(4))

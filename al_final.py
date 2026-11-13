@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from active_learning import (load_data, run_experiment, LinearHead,
                              ActiveLearner, entropy_sampling, test_metrics)
 
-SEEDS = [0, 1, 2]
+SEEDS = list(range(10))
 NOISE = 0.10
 
 # 1) Best strategy, chosen on VALIDATION only (mean val F1 over all cycles, random excluded)
@@ -20,20 +20,32 @@ d = load_data()
 
 # 2) Final runs: best strategy, random, and best strategy with a noisy expert
 rows = []
-for name, noise in [(best, 0.0), ("random", 0.0), (best, NOISE)]:
+for name, noise in [(best, 0.0), ("random", 0.0), (best, NOISE), ("random", NOISE)]:
     for seed in SEEDS:
         print("running", name, "| noise", noise, "| seed", seed, flush=True)
         rows += run_experiment(name, seed, d, noise=noise, test=True)
 res = pd.DataFrame(rows)
 res.to_csv("results/tables/al_final_runs.csv", index=False)
 
-# 3) Test results at the last cycle (mean and std over 3 seeds)
+# 3) Test results at the last cycle (mean and std over 10 seeds)
 final = res[res.cycle == res.cycle.max()].copy()
-final["setting"] = np.where(final.noise > 0, best + " (10% noisy expert)", final.strategy)
+final["setting"] = np.where(final.noise > 0, final.strategy + " (10% noisy expert)", final.strategy)
 summ = final.groupby("setting").agg(
     test_f1=("test_f1", "mean"), test_f1_std=("test_f1", "std"),
     test_bal_acc=("test_bal_acc", "mean"), test_bal_acc_std=("test_bal_acc", "std"),
     test_recall_mel=("test_recall_mel", "mean"), test_recall_mel_std=("test_recall_mel", "std"))
+
+# Paired comparison on the test set (same seed = same initial labelled set and model)
+from scipy.stats import wilcoxon
+per_seed = final.pivot(index="seed", columns="setting", values="test_f1")
+print("\nPaired comparison on the test set (macro F1, Wilcoxon signed-rank):")
+for a, r in [(best, "random"),
+             (best + " (10% noisy expert)", "random (10% noisy expert)"),
+             (best + " (10% noisy expert)", best),
+             ("random (10% noisy expert)", "random")]:
+    diff = per_seed[a] - per_seed[r]
+    print(f"{a} vs {r}: mean diff {diff.mean():+.4f} | better in {(diff > 0).sum()}/{len(diff)} seeds"
+          f" | p = {wilcoxon(per_seed[a], per_seed[r]).pvalue:.4f}")
 
 # 4) References: our model on 100% of the training set, and the team baseline
 ref = LinearHead(seed=0).fit(d["Xtr"], d["ytr"], epochs=100, X_val=d["Xva"], y_val=d["yva"])
@@ -50,12 +62,14 @@ print(summ.to_string())
 
 # 5) Figure: clean vs noisy expert (validation curves)
 fig, ax = plt.subplots(figsize=(7, 4.5))
-settings = [("random", res[res.strategy == "random"], "gray"),
-            (best, res[(res.strategy == best) & (res.noise == 0)], "tab:blue"),
-            (best + " (10% noisy expert)", res[(res.strategy == best) & (res.noise > 0)], "tab:red")]
-for label, g, color in settings:
+settings = [("random", "random", 0, "gray", "-"),
+            ("random (10% noisy expert)", "random", 1, "gray", "--"),
+            (best, best, 0, "tab:blue", "-"),
+            (best + " (10% noisy expert)", best, 1, "tab:blue", "--")]
+for label, name, noisy, color, ls in settings:
+    g = res[(res.strategy == name) & ((res.noise > 0) == bool(noisy))]
     m = g.groupby("n_labelled").val_f1.agg(["mean", "std"])
-    ax.plot(m.index, m["mean"], marker="o", ms=3, label=label, color=color)
+    ax.plot(m.index, m["mean"], marker="o", ms=3, label=label, color=color, linestyle=ls)
     ax.fill_between(m.index, m["mean"] - m["std"], m["mean"] + m["std"], alpha=0.12, color=color)
 ax.set_xlabel("Labelled images")
 ax.set_ylabel("Macro F1 (validation)")
