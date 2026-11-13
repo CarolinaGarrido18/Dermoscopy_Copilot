@@ -1,0 +1,6 @@
+setting,test_f1,test_f1_std,test_bal_acc,test_bal_acc_std,test_recall_mel,test_recall_mel_std
+hybrid,0.6055,0.0028,0.6097,0.0111,0.5346,0.0189
+hybrid (10% noisy expert),0.5118,0.0276,0.5878,0.0148,0.5451,0.0594
+random,0.574,0.0124,0.5993,0.02,0.5451,0.0073
+"100% of training set (ours, 1 run)",0.6391,,0.6223,,0.6101,
+"team baseline (100%, 1 run)",0.6227,,0.6373,,0.6918,

@@ -29,7 +29,7 @@ def initial_split(y_orig, seed):
 
 
 class LinearHead:
-    """Linear layer 1280 -> 7 on top of frozen EfficientNet-B0 features (sklearn-like API)."""
+    """Linear layer 1280 -> 7 on top of frozen EfficientNetV2-S features"""
     def __init__(self, seed=0, n_features=1280, n_classes=7):
         torch.manual_seed(seed)
         self.net = nn.Linear(n_features, n_classes)
@@ -61,8 +61,14 @@ class LinearHead:
         return self
 
     def predict_proba(self, X):
+        """X: (N, D) or (N, V, D). With V views, probabilities are averaged (TTA)."""
         with torch.no_grad():
-            return torch.softmax(self.net(torch.tensor(X)), 1).numpy()
+            X = torch.tensor(X)
+            if X.ndim == 3:
+                N, V, D = X.shape
+                p = torch.softmax(self.net(X.reshape(N * V, D)), 1).reshape(N, V, -1)
+                return p.mean(1).numpy()
+            return torch.softmax(self.net(X), 1).numpy()
 
 
 # Query strategies: each returns (order, scores), most informative first (as in the tutorial)
