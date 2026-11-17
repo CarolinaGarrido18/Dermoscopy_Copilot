@@ -1,14 +1,10 @@
-#path_img = "C:\\Users\\carol\\.cache\\kagglehub\\datasets\\kmader\\skin-cancer-mnist-ham10000\\versions\\2"
-#path_seg = "C:\\Users\\carol\\.cache\\kagglehub\\datasets\\tschandl\\ham10000-lesion-segmentations\\versions\\1"
 """
-Extração de features com EfficientNet-B0 (pré-treinada no ImageNet).
+Extração de features com backbone pré-treinado (timm) + Test-Time Augmentation.
 
-Passa cada imagem uma só vez pela CNN e guarda os vetores (1280 valores por imagem)
-em disco (mais cópias aumentadas das imagens de treino). Depois, o ciclo de Active Learning só treina a camada de classificação
-sobre estes vetores, o que é muito rápido.
+- Treino: imagem original (aug_idx 0) + N_AUG cópias aumentadas -> X shape (N, D)
+- Val/Teste: TTA com 8 vistas (4 rotações x espelhamento)       -> X shape (N, 8, D)
 
-Pré-requisito: já ter corrido o preparar_dados.py e ter a pasta "splits" com
-train.csv, val.csv e test.csv (colunas image_id, lesion_id, dx).
+Pré-requisito: pasta "splits" com train.csv, val.csv e test.csv (image_id, lesion_id, dx).
 """
 
 import os
@@ -20,36 +16,30 @@ import pandas as pd
 import timm
 import torch
 from PIL import Image
+from timm.data import resolve_data_config
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
 
 # CONFIGURAÇÃO
 
-# Mudar este caminho para o mesmo path_img da preparação de dados
 PATH_IMG = "C:\\Users\\carol\\.cache\\kagglehub\\datasets\\kmader\\skin-cancer-mnist-ham10000\\versions\\2"
 
-BASE = Path(__file__).parent   # Pasta onde este script está guardado
-SPLITS_DIR = BASE / "splits"   # Caminho para a pasta com os CSVs (treino, teste, validação)
-OUT_DIR = BASE / "features"    # Caminho para a pasta onde os resultados vão ficar
-OUT_DIR.mkdir(exist_ok=True)   # Cria a pasta "features" se ela ainda não existir
+# "efficientnet_b3" (1536 feats) | "convnext_tiny" (768) | "convnext_small" (768) | "convnext_base" (1024)
+BACKBONE = "tf_efficientnetv2_s.in21k_ft_in1k"
 
-BATCH_SIZE = 32                # Processa 32 imagens de cada vez para não esgotar a RAM.
-MODEL_NAME = "efficientnet_b0"
+BASE = Path(__file__).parent
+SPLITS_DIR = BASE / "splits"
+OUT_DIR = BASE / f"features_{BACKBONE}"     # tem de coincidir com BACKBONE do baseline_passivo.py
+OUT_DIR.mkdir(exist_ok=True)
 
-# Nº de cópias aumentadas (data augmentation) por imagem de TREINO.
-# 0 = sem augmentation. Com 2, cada imagem de treino fica com 3 versões:
-# original + 2 variações (rotação, espelhamento, brilho). Val e teste nunca são aumentados.
-N_AUG = 2
+BATCH_SIZE = 16        # as 8 vistas multiplicam a memória; baixa para 8 se faltar memória GPU
+N_AUG = 2              # cópias aumentadas por imagem de TREINO
 SEED = 42
-
-
 MAX_IMAGES_POR_SPLIT = None
 
-# Ordem fixa das classes
 CLASSES = ["akiec", "bcc", "bkl", "df", "mel", "nv", "vasc"]
 CLASS_TO_IDX = {c: i for i, c in enumerate(CLASSES)}
-
 
 
 # DATASET
@@ -69,28 +59,56 @@ class HAMDataset(Dataset):
         return self.transform(img), CLASS_TO_IDX[row["dx"]]
 
 
+def vistas_tta(x):
+    """8 vistas: rotações 0/90/180/270, cada uma com e sem espelhamento."""
+    out = []
+    for k in range(4):
+        r = torch.rot90(x, k, dims=(2, 3))
+        out += [r, torch.flip(r, dims=(3,))]
+    return out
+
+
+@torch.no_grad()
+def extrair(model, loader, device, tta):
+    feats, ys = [], []
+    for b, (x, y) in enumerate(loader):
+        x = x.to(device)
+        views = vistas_tta(x) if tta else [x]
+        with torch.autocast(device_type="cuda", enabled=(device == "cuda")):
+            f = torch.stack([model(v).float() for v in views], dim=1)  # (B, V, D)
+        feats.append(f.cpu().numpy())
+        ys.append(y.numpy())
+        print(f"  batch {b + 1}/{len(loader)}", end="\r")
+    X = np.concatenate(feats)
+    return (X if tta else X[:, 0]), np.concatenate(ys)
+
+
 def main():
-    # 1) Ligar image_id -> ficheiro .jpg (as imagens estão em 2 pastas)
+    # 1) image_id -> ficheiro .jpg
     img_paths = {
         os.path.splitext(os.path.basename(f))[0]: f
         for f in glob(os.path.join(PATH_IMG, "*", "*.jpg"))
     }
     print("Imagens encontradas:", len(img_paths))
 
-    # 2) Transformações
-    norm = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225])
+    # 2) Modelo (sem camada final) e configuração de entrada do próprio backbone
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print("Dispositivo:", device, "| Backbone:", BACKBONE)
+    model = timm.create_model(BACKBONE, pretrained=True, num_classes=0)
+    model.eval().to(device)
 
-    # Versão original: só resize + normalização
+    cfg = resolve_data_config({}, model=model)
+    SIZE = cfg["input_size"][1]
+    print(f"Tamanho de entrada: {SIZE} | features: {model.num_features}")
+
+    norm = transforms.Normalize(mean=cfg["mean"], std=cfg["std"])
     base_tf = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((SIZE, SIZE)),
         transforms.ToTensor(),
         norm,
     ])
-
-    # Versão aumentada: espelhar, rodar e mudar o brilho (aleatório em cada cópia)
     aug_tf = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((SIZE, SIZE)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.5),
         transforms.RandomRotation(degrees=180),
@@ -99,48 +117,38 @@ def main():
         norm,
     ])
 
-    torch.manual_seed(SEED)  # reprodutibilidade das variações aleatórias
+    torch.manual_seed(SEED)
 
-    # 3) Modelo pré-treinado, sem a camada final (num_classes=0 -> devolve as features)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print("Dispositivo:", device)
-    model = timm.create_model(MODEL_NAME, pretrained=True, num_classes=0)
-    model.eval().to(device)
-
-    # 4) Extrair features para cada split
+    # 3) Extração
     for split in ["train", "val", "test"]:
         df = pd.read_csv(SPLITS_DIR / f"{split}.csv")
         if MAX_IMAGES_POR_SPLIT:
             df = df.head(MAX_IMAGES_POR_SPLIT)
 
-        # Só o treino tem cópias aumentadas; aug_idx 0 = imagem original
-        variantes = [(0, base_tf)]
         if split == "train":
-            variantes += [(k, aug_tf) for k in range(1, N_AUG + 1)]
-
-        all_X, all_y, all_ids, all_aug = [], [], [], []
-        for aug_idx, tf in variantes:
-            # num_workers=0 evita problemas no Windows
-            loader = DataLoader(HAMDataset(df, img_paths, tf),
+            # original + cópias aumentadas, sem TTA -> (N, D)
+            variantes = [(0, base_tf)] + [(k, aug_tf) for k in range(1, N_AUG + 1)]
+            all_X, all_y, all_ids, all_aug = [], [], [], []
+            for aug_idx, tf in variantes:
+                loader = DataLoader(HAMDataset(df, img_paths, tf),
+                                    batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+                print(f"[{split}] aug {aug_idx}")
+                X_a, y_a = extrair(model, loader, device, tta=False)
+                all_X.append(X_a); all_y.append(y_a)
+                all_ids.append(df["image_id"].values)
+                all_aug.append(np.full(len(df), aug_idx))
+            X, y = np.concatenate(all_X), np.concatenate(all_y)
+            ids, aug = np.concatenate(all_ids), np.concatenate(all_aug)
+        else:
+            # val/teste: só a imagem original, com 8 vistas TTA -> (N, 8, D)
+            loader = DataLoader(HAMDataset(df, img_paths, base_tf),
                                 batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
-            with torch.no_grad():
-                for b, (x, y) in enumerate(loader):
-                    f = model(x.to(device))
-                    all_X.append(f.cpu().numpy())
-                    all_y.append(y.numpy())
-                    print(f"  [{split}] aug {aug_idx} batch {b + 1}/{len(loader)}", end="\r")
-            all_ids.append(df["image_id"].values)
-            all_aug.append(np.full(len(df), aug_idx))
+            print(f"[{split}] TTA x8")
+            X, y = extrair(model, loader, device, tta=True)
+            ids, aug = df["image_id"].values, np.zeros(len(df), dtype=int)
 
-        X = np.concatenate(all_X)
-        y = np.concatenate(all_y)
-
-        np.savez_compressed(
-            OUT_DIR / f"{split}_features.npz",
-            X=X, y=y,
-            image_ids=np.concatenate(all_ids),
-            aug_idx=np.concatenate(all_aug),
-        )
+        np.savez_compressed(OUT_DIR / f"{split}_features.npz",
+                            X=X, y=y, image_ids=ids, aug_idx=aug)
         print(f"\n[{split}] X: {X.shape} | y: {y.shape} -> guardado")
 
     print("\nConcluído. Ficheiros em:", OUT_DIR)
