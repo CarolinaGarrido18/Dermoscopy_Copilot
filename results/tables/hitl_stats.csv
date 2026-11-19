@@ -1,0 +1,12 @@
+family,summary,oracle,comparison,mean_diff,seeds_better,n_seeds,p,p_holm
+AL vs random,test F1 (último ciclo),perfect,hybrid vs random,0.036,10,10,0.002,0.0215
+AL vs random,val F1 médio (ciclos),perfect,hybrid vs random,0.0266,9,10,0.0039,0.0215
+AL vs random,test F1 (último ciclo),uniform,hybrid vs random,0.058,10,10,0.002,0.0215
+AL vs random,val F1 médio (ciclos),uniform,hybrid vs random,0.054,10,10,0.002,0.0215
+AL vs random,test F1 (último ciclo),single,hybrid vs random,0.0479,10,10,0.002,0.0215
+AL vs random,val F1 médio (ciclos),single,hybrid vs random,0.0586,10,10,0.002,0.0215
+AL vs random,test F1 (último ciclo),majority,hybrid vs random,0.0474,10,10,0.002,0.0215
+AL vs random,val F1 médio (ciclos),majority,hybrid vs random,0.0445,10,10,0.002,0.0215
+oráculo vs perfeito,test F1 (último ciclo),uniform,uniform vs perfect (hybrid),-0.1358,0,10,0.002,0.0215
+oráculo vs perfeito,test F1 (último ciclo),single,single vs perfect (hybrid),-0.0883,0,10,0.002,0.0215
+oráculo vs perfeito,test F1 (último ciclo),majority,majority vs perfect (hybrid),-0.0296,0,10,0.002,0.0215

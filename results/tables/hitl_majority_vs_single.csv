@@ -1,0 +1,9 @@
+strategy,basis,mean_majority,mean_single,mean_diff,std_diff,seeds_majority_better,n_seeds,p,p_holm
+hybrid,"test F1, mesmas imagens (último ciclo)",0.5806,0.5219,0.0587,0.0165,10,10,0.002,0.0156
+hybrid,"val F1, mesmo custo (2145 anotações)",0.5604,0.571,-0.0106,0.0212,3,10,0.1934,0.3867
+hybrid,"val F1, mesmo custo (2930 anotações)",0.5677,0.586,-0.0184,0.0304,1,10,0.0645,0.1953
+hybrid,"val F1, mesmo custo (3715 anotações)",0.5889,0.5863,0.0026,0.0328,5,10,1.0,1.0
+random,"test F1, mesmas imagens (último ciclo)",0.5332,0.474,0.0592,0.0226,10,10,0.002,0.0156
+random,"val F1, mesmo custo (2145 anotações)",0.5604,0.4992,0.0612,0.0145,10,10,0.002,0.0156
+random,"val F1, mesmo custo (2930 anotações)",0.5405,0.5178,0.0227,0.028,8,10,0.0371,0.1855
+random,"val F1, mesmo custo (3715 anotações)",0.5424,0.5258,0.0166,0.022,8,10,0.0488,0.1953
