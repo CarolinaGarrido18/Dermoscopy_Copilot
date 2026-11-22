@@ -1,16 +1,36 @@
+"""
+Dermoscopy Copilot - 04. Final evaluation on the test set and noisy oracle
+
+Selects the best query strategy on the validation set and runs it again, together with random sampling,
+with 10 seeds, evaluating the final model of each run on the test set (the test set is used only here).
+Both are also run with a noisy oracle that labels 10% of the queried images wrongly, to study how
+annotation quality affects active learning. Random sampling with a noisy oracle is the control. In the
+tables and figures, the noisy oracle is labelled "noisy expert". Two references trained on 100% of the
+training images are added, the linear model of active_learning.py and the passive baseline.
+
+The runs are saved in results/tables/al_final_runs.csv, the test results in
+results/tables/al_test_results.csv and the figure in results/figures/al_noise.png.
+
+Prerequisite: results/tables/al_curves.csv produced by active_learning.py and the baseline metrics
+in results/results_baseline/results_<BACKBONE>/ produced by train_baseline.py
+"""
+
+# Library imports
 import json
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("Agg")  # save the figures to a file without opening a window
 import matplotlib.pyplot as plt
-from active_learning import (load_data, run_experiment, LinearHead,
-                             ActiveLearner, entropy_sampling, test_metrics)
+from scipy.stats import wilcoxon   # paired, non-parametric statistical test
+from active_learning import (load_data, run_experiment, LinearHead, ActiveLearner, entropy_sampling, test_metrics)
 
-SEEDS = list(range(10))
-NOISE = 0.10
 
-# 1) Best strategy, chosen on VALIDATION only (mean val F1 over all cycles, random excluded)
+SEEDS = list(range(10))  # same 10 seeds as in active_learning.py
+NOISE = 0.10  # fraction of queried images that the noisy oracle labels wrongly
+
+
+# Best query strategy, chosen on the validation set only (highest mean macro F1 over all cycles, random sampling excluded)
 curves = pd.read_csv("results/tables/al_curves.csv")
 mean_f1 = curves[curves.strategy != "random"].groupby("strategy").val_f1.mean()
 best = mean_f1.idxmax()
@@ -18,7 +38,9 @@ print("Best strategy on validation (mean over cycles):", best)
 
 d = load_data()
 
-# 2) Final runs: best strategy, random, and best strategy with a noisy expert
+
+# Final runs
+# Best strategy and random sampling, each with a perfect and a noisy oracle, evaluated on the test set at the end
 rows = []
 for name, noise in [(best, 0.0), ("random", 0.0), (best, NOISE), ("random", NOISE)]:
     for seed in SEEDS:
@@ -27,45 +49,39 @@ for name, noise in [(best, 0.0), ("random", 0.0), (best, NOISE), ("random", NOIS
 res = pd.DataFrame(rows)
 res.to_csv("results/tables/al_final_runs.csv", index=False)
 
-# 3) Test results at the last cycle (mean and std over 10 seeds)
+
+# Test results at the last cycle (mean and standard deviation over the 10 seeds)
 final = res[res.cycle == res.cycle.max()].copy()
 final["setting"] = np.where(final.noise > 0, final.strategy + " (10% noisy expert)", final.strategy)
-summ = final.groupby("setting").agg(
-    test_f1=("test_f1", "mean"), test_f1_std=("test_f1", "std"),
-    test_bal_acc=("test_bal_acc", "mean"), test_bal_acc_std=("test_bal_acc", "std"),
-    test_recall_mel=("test_recall_mel", "mean"), test_recall_mel_std=("test_recall_mel", "std"))
+summ = final.groupby("setting").agg(test_f1=("test_f1", "mean"), test_f1_std=("test_f1", "std"), test_bal_acc=("test_bal_acc", "mean"), test_bal_acc_std=("test_bal_acc", "std"), test_recall_mel=("test_recall_mel", "mean"), test_recall_mel_std=("test_recall_mel", "std"))
 
-# Paired comparison on the test set (same seed = same initial labelled set and model)
-from scipy.stats import wilcoxon
+
+# Paired comparison on the test set
+# For the same seed, both settings start from the same labelled data and the same model
 per_seed = final.pivot(index="seed", columns="setting", values="test_f1")
 print("\nPaired comparison on the test set (macro F1, Wilcoxon signed-rank):")
-for a, r in [(best, "random"),
-             (best + " (10% noisy expert)", "random (10% noisy expert)"),
-             (best + " (10% noisy expert)", best),
-             ("random (10% noisy expert)", "random")]:
-    diff = per_seed[a] - per_seed[r]
-    print(f"{a} vs {r}: mean diff {diff.mean():+.4f} | better in {(diff > 0).sum()}/{len(diff)} seeds"
-          f" | p = {wilcoxon(per_seed[a], per_seed[r]).pvalue:.4f}")
+for a, r in [(best, "random"), (best + " (10% noisy expert)", "random (10% noisy expert)"), (best + " (10% noisy expert)", best), ("random (10% noisy expert)", "random")]:
+    diff = per_seed[a] - per_seed[r]  # one paired difference per seed
+    print(f"{a} vs {r}: mean diff {diff.mean():+.4f} | better in {(diff > 0).sum()}/{len(diff)} seeds" f" | p = {wilcoxon(per_seed[a], per_seed[r]).pvalue:.4f}")
 
-# 4) References: our model on 100% of the training set, and the team baseline
+
+# References trained on 100% of the training images
+# Our linear model (one run) and the passive baseline of the project (one run)
 ref = LinearHead(seed=0).fit(d["Xtr"], d["ytr"], epochs=100, X_val=d["Xva"], y_val=d["yva"])
 rm = test_metrics(ActiveLearner(ref, entropy_sampling), d)
-summ.loc["100% of training set (ours, 1 run)"] = [
-    rm["test_f1"], np.nan, rm["test_bal_acc"], np.nan, rm["test_recall_mel"], np.nan]
-b = json.load(open("results/baseline_metrics.json"))
-summ.loc["team baseline (100%, 1 run)"] = [
-    b["f1_macro"], np.nan, b["balanced_acc"], np.nan, b["recall_melanoma"], np.nan]
+summ.loc["100% of training set (ours, 1 run)"] = [rm["test_f1"], np.nan, rm["test_bal_acc"], np.nan, rm["test_recall_mel"], np.nan]
+b = json.load(open("results/results_baseline/results_tf_efficientnetv2_s.in21k_ft_in1k/baseline_metrics.json"))
+summ.loc["team baseline (100%, 1 run)"] = [b["f1_macro"], np.nan, b["balanced_acc"], np.nan, b["recall_melanoma"], np.nan]
 summ = summ.round(4)
 summ.to_csv("results/tables/al_test_results.csv")
 print("\nTest results (final cycle, ~52% of the images labelled):")
 print(summ.to_string())
 
-# 5) Figure: clean vs noisy expert (validation curves)
+
+# Figure
+# Validation learning curves with a perfect and a noisy oracle (solid and dashed lines)
 fig, ax = plt.subplots(figsize=(7, 4.5))
-settings = [("random", "random", 0, "gray", "-"),
-            ("random (10% noisy expert)", "random", 1, "gray", "--"),
-            (best, best, 0, "tab:blue", "-"),
-            (best + " (10% noisy expert)", best, 1, "tab:blue", "--")]
+settings = [("random", "random", 0, "gray", "-"), ("random (10% noisy expert)", "random", 1, "gray", "--"), (best, best, 0, "tab:blue", "-"), (best + " (10% noisy expert)", best, 1, "tab:blue", "--")]
 for label, name, noisy, color, ls in settings:
     g = res[(res.strategy == name) & ((res.noise > 0) == bool(noisy))]
     m = g.groupby("n_labelled").val_f1.agg(["mean", "std"])
