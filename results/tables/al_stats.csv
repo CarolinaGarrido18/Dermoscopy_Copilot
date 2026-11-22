@@ -1,12 +1,12 @@
 summary,comparison,mean_diff,std_diff,seeds_better,n_seeds,p_wilcoxon,p_holm
 mean over cycles,entropy vs random,0.0193,0.0127,9,10,0.0039,0.0156
-mean over cycles,hybrid vs random,0.0254,0.0171,9,10,0.0039,0.0156
+mean over cycles,hybrid vs random,0.0259,0.0178,9,10,0.0039,0.0156
 mean over cycles,least_confidence vs random,0.0218,0.0133,9,10,0.0039,0.0156
 mean over cycles,margin vs random,0.0195,0.013,9,10,0.0059,0.0156
 last cycle,entropy vs random,0.0142,0.0154,8,10,0.0273,0.0586
-last cycle,hybrid vs random,0.0208,0.0146,9,10,0.0059,0.0234
+last cycle,hybrid vs random,0.0209,0.0129,10,10,0.002,0.0078
 last cycle,least_confidence vs random,0.0137,0.0165,8,10,0.0195,0.0586
 last cycle,margin vs random,0.0171,0.0197,7,10,0.0645,0.0645
-mean over cycles,entropy vs hybrid,-0.0061,0.0055,2,10,0.0098,0.0293
-mean over cycles,least_confidence vs hybrid,-0.0036,0.0077,4,10,0.2754,0.2754
-mean over cycles,margin vs hybrid,-0.0059,0.0074,3,10,0.0488,0.0977
+mean over cycles,entropy vs hybrid,-0.0066,0.0065,1,10,0.0059,0.0176
+mean over cycles,least_confidence vs hybrid,-0.0041,0.0086,3,10,0.2754,0.2754
+mean over cycles,margin vs hybrid,-0.0064,0.0071,3,10,0.0273,0.0547
