@@ -1,8 +1,8 @@
 """
 Fase 4: Quem decide (Referral / Selective Prediction).
 
-Carrega o modelo de referência (`baseline_head.pt`), calibra as probabilidades na
-validação (Temperature Scaling) e avalia a regra de encaminhamento clínico:
+Carrega o modelo final do active learning (`al_head.pt`, de export_al_head.py), calibra as
+probabilidades na validação (Temperature Scaling) e avalia a regra de encaminhamento clínico:
   confiança < X  OU  P(melanoma) >= 0.20  ->  enviado para o humano (in the loop)
   caso contrário                          ->  decisão automática com supervisão (on the loop)
 
@@ -124,8 +124,8 @@ def main():
     os.makedirs("results/tables", exist_ok=True)
     os.makedirs("results/figures", exist_ok=True)
 
-    # 1. Carregar modelo de referência e splits
-    W, b = load_baseline_head()
+    # 1. Carregar o modelo final do active learning (o mesmo que a app usa) e os splits
+    W, b = load_baseline_head("results/results_active_learning/al_head.pt")
     Xva, yva, _, _ = load_split("val")
     Xte, yte, _, _ = load_split("test")
 
@@ -158,17 +158,17 @@ def main():
     # 4. Gráfico "% enviados ao humano vs erros"
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
-    for df_sub, title in [(df_va, "Validação"), (df_te, "Teste")]:
-        ax = axes[0] if title == "Validação" else axes[1]
+    for df_sub, title in [(df_va, "Validation"), (df_te, "Test")]:
+        ax = axes[0] if title == "Validation" else axes[1]
         ax2 = ax.twinx()
 
         l1 = ax.plot(
             df_sub["pct_sent_human"], df_sub["ai_error_rate_total_pct"],
-            "o-", color="tab:blue", label="Taxa de erro total da IA (%)"
+            "o-", color="tab:blue", label="Total AI error rate (%)"
         )
         l2 = ax2.plot(
             df_sub["pct_sent_human"], df_sub["missed_melanomas"],
-            "s--", color="tab:red", label="Melanomas falhados pela IA (nº)"
+            "s--", color="tab:red", label="Melanomas missed by the AI (n)"
         )
 
         for _, r in df_sub.iterrows():
@@ -178,10 +178,10 @@ def main():
                 textcoords="offset points", xytext=(0, 7), ha="center", fontsize=8
             )
 
-        ax.set_title(f"Referral: Custo Humano vs. Risco ({title})")
-        ax.set_xlabel("% de casos enviados ao humano (in the loop)")
-        ax.set_ylabel("Erros nos casos mantidos na IA (% do total)", color="tab:blue")
-        ax2.set_ylabel("Melanomas falhados pela IA (nº absoluto)", color="tab:red")
+        ax.set_title(f"Referral: human workload vs. risk ({title})")
+        ax.set_xlabel("% of cases referred to the human (in the loop)")
+        ax.set_ylabel("AI errors on the cases it keeps (% of total)", color="tab:blue")
+        ax2.set_ylabel("Melanomas missed by the AI (n)", color="tab:red")
         ax.grid(alpha=0.3)
 
         lines = l1 + l2

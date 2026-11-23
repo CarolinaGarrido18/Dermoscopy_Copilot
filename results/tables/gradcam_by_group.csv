@@ -1,12 +1,23 @@
-,group_type,energy_in_mask,energy_ratio,pointing_game,iou,border_ratio,n
-akiec,class (true),0.5233,1.3292,0.6739,0.1944,0.723,46
-bcc,class (true),0.4408,2.0365,0.7568,0.2635,0.5216,74
-bkl,class (true),0.4081,1.5169,0.6752,0.2378,0.8451,157
-df,class (true),0.4039,1.4803,0.7059,0.214,0.702,17
-mel,class (true),0.518,2.3362,0.8616,0.3901,0.5292,159
-nv,class (true),0.4851,2.5994,0.9102,0.4623,0.4678,958
-vasc,class (true),0.4823,5.3237,0.95,0.5139,0.206,20
-correct,outcome,0.4844,2.46,0.8964,0.4411,0.5079,1071
-mel -> nv (missed melanoma),outcome,0.4447,3.5185,0.8966,0.4262,0.3731,29
-nv -> mel (false melanoma),outcome,0.5675,3.0691,0.9573,0.474,0.3628,117
-other error,outcome,0.4032,1.624,0.6308,0.2074,0.7274,214
+,model,group_type,energy_in_mask,energy_ratio,pointing_game,iou,border_ratio,n
+akiec,passive (100%),class (true),0.5233,1.3292,0.6739,0.1944,0.723,46
+bcc,passive (100%),class (true),0.4408,2.0365,0.7568,0.2635,0.5216,74
+bkl,passive (100%),class (true),0.4081,1.5169,0.6752,0.2378,0.8451,157
+df,passive (100%),class (true),0.4039,1.4803,0.7059,0.214,0.702,17
+mel,passive (100%),class (true),0.518,2.3362,0.8616,0.3901,0.5292,159
+nv,passive (100%),class (true),0.4851,2.5994,0.9102,0.4623,0.4678,958
+vasc,passive (100%),class (true),0.4823,5.3237,0.95,0.5139,0.206,20
+correct,passive (100%),outcome,0.4844,2.46,0.8964,0.4411,0.5079,1071
+mel -> nv (missed melanoma),passive (100%),outcome,0.4447,3.5185,0.8966,0.4262,0.3731,29
+nv -> mel (false melanoma),passive (100%),outcome,0.5675,3.0691,0.9573,0.474,0.3628,117
+other error,passive (100%),outcome,0.4032,1.624,0.6308,0.2074,0.7274,214
+akiec,"active learning (hybrid, 50%)",class (true),0.5042,1.238,0.6522,0.1767,0.7573,46
+bcc,"active learning (hybrid, 50%)",class (true),0.4538,2.0481,0.7568,0.2458,0.4855,74
+bkl,"active learning (hybrid, 50%)",class (true),0.3946,1.4875,0.6306,0.2282,0.8903,157
+df,"active learning (hybrid, 50%)",class (true),0.3663,1.2757,0.7647,0.2227,0.8087,17
+mel,"active learning (hybrid, 50%)",class (true),0.5169,2.2748,0.8491,0.373,0.5514,159
+nv,"active learning (hybrid, 50%)",class (true),0.4673,2.4818,0.8904,0.4493,0.5128,958
+vasc,"active learning (hybrid, 50%)",class (true),0.4575,5.1345,0.95,0.4998,0.2399,20
+correct,"active learning (hybrid, 50%)",outcome,0.47,2.4124,0.8817,0.4334,0.5434,1107
+mel -> nv (missed melanoma),"active learning (hybrid, 50%)",outcome,0.4157,3.4021,0.875,0.4468,0.4001,40
+nv -> mel (false melanoma),"active learning (hybrid, 50%)",outcome,0.6354,2.3294,0.9444,0.3916,0.3908,72
+other error,"active learning (hybrid, 50%)",outcome,0.3833,1.5628,0.5943,0.1883,0.7658,212

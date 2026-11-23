@@ -159,7 +159,7 @@ def main():
     ap.add_argument("--img-dir"), ap.add_argument("--mask-dir")
     ap.add_argument("--splits", default="splits")
     ap.add_argument("--heads-dir", default="results/heads")
-    ap.add_argument("--baseline", default="baseline_head.pt")
+    ap.add_argument("--baseline", default=f"results/results_baseline/results_{BACKBONE}/baseline_head.pt")
     ap.add_argument("--oracles", nargs="+", default=["perfect", "majority"])
     ap.add_argument("--seeds", type=int, default=3, help="nº de seeds (cabeças guardadas) a avaliar")
     ap.add_argument("--budgets", nargs="+", type=float, default=[0.10, 0.30, 0.50],
@@ -236,35 +236,39 @@ def main():
     print("\nLocalização do Grad-CAM (média sobre imagens e depois sobre seeds):")
     print(summ[[(m, "mean") for m in METRICS]].to_string())
 
-    # ---- 2) o modelo passivo: por classe e por tipo de resultado (inclui mel <-> nv) ----
+    # ---- 2) por classe e por tipo de resultado (inclui mel <-> nv), para o modelo passivo e para o modelo final do AL (hybrid, perfect, seed 0, último ciclo), que é o usado pelo referral e pela app ----
     base = per_img[per_img.kind == "passive"]
+    al_all = per_img[per_img.kind == "AL"]
+    final_al = al_all[(al_all.strategy == "hybrid") & (al_all.oracle == "perfect") & (al_all.seed == 0) & (al_all.n_labelled == al_all.n_labelled.max())]
     rows = []
-    for gtype, col in (("class (true)", base.true.map(lambda i: CLASSES[i])), ("outcome", base.outcome)):
-        t = base.groupby(col)[METRICS].mean().round(4)
-        t["n"] = base.groupby(col).size()
-        t.insert(0, "group_type", gtype)
-        rows.append(t)
+    for model_name, sub in (("passive (100%)", base), ("active learning (hybrid, 50%)", final_al)):
+        for gtype, col in (("class (true)", sub.true.map(lambda i: CLASSES[i])), ("outcome", sub.outcome)):
+            t = sub.groupby(col)[METRICS].mean().round(4)
+            t["n"] = sub.groupby(col).size()
+            t.insert(0, "group_type", gtype)
+            t.insert(0, "model", model_name)
+            rows.append(t)
     byg = pd.concat(rows)
     byg.to_csv("results/tables/gradcam_by_group.csv")
-    print("\nModelo passivo, por grupo:\n", byg.to_string())
+    print("\nPor grupo (modelo passivo e modelo final do AL):\n", byg.to_string())
 
     # ---- 3) figura: métricas vs etiquetas ----
     al = per_head[per_head.kind == "AL"].groupby(["strategy", "oracle", "n_labelled"])[METRICS].agg(
         ["mean", "std"])
     ref = per_head[per_head.kind == "passive"][METRICS].mean()
-    panels = [("energy_ratio", "Energia dentro da lesão / área da lesão\n(1 = acaso)"),
-              ("pointing_game", "Pointing game (pico dentro da lesão)"),
-              ("border_ratio", "Energia no bordo / área do bordo\n(1 = acaso; menor é melhor)")]
+    panels = [("energy_ratio", "Energy inside the lesion / lesion area\n(1 = chance)"),
+              ("pointing_game", "Pointing game (peak inside the lesion)"),
+              ("border_ratio", "Energy on the border / border area\n(1 = chance, lower is better)")]
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.3))
     for ax, (met, title) in zip(axes, panels):
         for (strategy, oracle), g in al.groupby(level=[0, 1]):
             ls = "--" if strategy == "random" else "-"
             ax.errorbar(g.index.get_level_values(2), g[(met, "mean")], yerr=g[(met, "std")].fillna(0),
                         marker="o", ms=3, capsize=2, ls=ls, label=f"{strategy} ({oracle})")
-        ax.axhline(ref[met], color="k", ls=":", label="passivo (100% do treino)")
+        ax.axhline(ref[met], color="k", ls=":", label="passive (100% of training set)")
         if met != "pointing_game":
             ax.axhline(1.0, color="gray", lw=0.6)
-        ax.set_xlabel("Imagens etiquetadas")
+        ax.set_xlabel("Labelled images")
         ax.set_title(title, fontsize=9)
         ax.grid(alpha=0.3)
     axes[0].legend(fontsize=7)
@@ -273,10 +277,10 @@ def main():
 
     # ---- 4) exemplos qualitativos ----
     bidx = base.set_index("image_id")
-    cases = [("melanoma correto", (base.true == 4) & (base.pred == 4)),
-             ("nevo correto", (base.true == 5) & (base.pred == 5)),
-             ("nevo -> melanoma", base.outcome.str.startswith("nv ->")),
-             ("melanoma -> nevo", base.outcome.str.startswith("mel ->"))]
+    cases = [("correct melanoma", (base.true == 4) & (base.pred == 4)),
+        ("correct nevus", (base.true == 5) & (base.pred == 5)),
+        ("nevus -> melanoma", base.outcome.str.startswith("nv ->")),
+        ("melanoma -> nevus", base.outcome.str.startswith("mel ->"))]
     chosen = [(n, base[c].sample(1, random_state=0).image_id.iloc[0]) for n, c in cases if c.any()]
     al_heads = sorted([h for h in heads if h["kind"] == "AL" and h["strategy"] != "random"
                        and h["seed"] == 0 and h["oracle"] == args.oracles[0]],
@@ -292,13 +296,13 @@ def main():
         with torch.no_grad():
             A = backbone.forward_features(x[None].to(device)).float()
         axes[r, 0].imshow(img); axes[r, 0].contour(mk, levels=[0.5], colors="w", linewidths=1)
-        axes[r, 0].set_title(f"{name}\n(real: {CLASSES[int(bidx.loc[iid, 'true'])]})", fontsize=8)
+        axes[r, 0].set_title(f"{name}\n(true: {CLASSES[int(bidx.loc[iid, 'true'])]})", fontsize=8)
         for c, h in enumerate(show, start=1):
             cam, pred = compute_cam(A, h["W"], h["b"], size)
             axes[r, c].imshow(img); axes[r, c].imshow(cam[0].cpu().numpy(), cmap="jet", alpha=0.45)
             axes[r, c].contour(mk, levels=[0.5], colors="w", linewidths=1)
-            tag = "passivo" if h["kind"] == "passive" else f"{h['strategy']} @ {h['n_labelled']}"
-            axes[r, c].set_title(f"{tag}\nprevisto: {CLASSES[int(pred[0])]}", fontsize=8)
+            tag = "passive" if h["kind"] == "passive" else f"{h['strategy']} @ {h['n_labelled']}"
+            axes[r, c].set_title(f"{tag}\npredicted: {CLASSES[int(pred[0])]}", fontsize=8)
     for ax in axes.ravel():
         ax.axis("off")
     fig.tight_layout()

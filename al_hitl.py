@@ -104,8 +104,9 @@ def run_hitl(strategy, oracle_kind, seed, d, k=3, head_path=None):
     if head_path is not None:
         os.makedirs(os.path.dirname(head_path), exist_ok=True)
         torch.save(heads, head_path)
+        # Also saves the labelled images of the last cycle and the labels given by the annotators (used to retrain the model with the corrections of the clinician)
+        np.savez(head_path.replace(".pt", "_labelled.npz"), image_ids=d["ids_orig"][labelled], labels=y_given[labelled])
     return hist, quality
-
 
 def holm(p):
     p = np.asarray(p, dtype=float)
@@ -190,7 +191,7 @@ def main():
                 .unstack(["strategy", "oracle"]))
     tests = []
     for oracle in args.oracles:                       # AL vs random, para cada oráculo
-        for name, tab in (("test F1 (último ciclo)", pf), ("val F1 médio (ciclos)", mean_val)):
+        for name, tab in (("test F1 (last cycle)", pf), ("mean val F1 (cycles)", mean_val)):
             a, b = tab[(best, oracle)], tab[("random", oracle)]
             tests.append(dict(family="AL vs random", summary=name, oracle=oracle,
                               comparison=f"{best} vs random", mean_diff=(a - b).mean(),
@@ -199,7 +200,7 @@ def main():
     if "perfect" in args.oracles:                     # custo da qualidade: cada oráculo vs perfeito
         for oracle in [o for o in args.oracles if o != "perfect"]:
             a, b = pf[(best, oracle)], pf[(best, "perfect")]
-            tests.append(dict(family="oráculo vs perfeito", summary="test F1 (último ciclo)",
+            tests.append(dict(family="oracle vs perfect", summary="test F1 (last cycle)",
                               oracle=oracle, comparison=f"{oracle} vs perfect ({best})",
                               mean_diff=(a - b).mean(), seeds_better=int(((a - b) > 0).sum()),
                               n_seeds=len(a), p=safe_wilcoxon(a, b)))
@@ -220,9 +221,9 @@ def main():
                 ax.plot(x, m.f, ls=ls, color=colors[oracle], marker="o", ms=2.5,
                         label=f"{oracle} ({strategy})")
                 ax.fill_between(x, m.f - m.s, m.f + m.s, color=colors[oracle], alpha=0.08)
-    axes[0].set_xlabel("Imagens etiquetadas")
-    axes[1].set_xlabel("Anotações pedidas aos médicos (custo humano)")
-    axes[0].set_ylabel("Macro F1 (validação)")
+    axes[0].set_xlabel("Labelled images")
+    axes[1].set_xlabel("Annotations requested from dermatologists (annotation cost)")
+    axes[0].set_ylabel("Macro F1 (validation)")
     for ax in axes:
         ax.grid(alpha=0.3)
     axes[1].legend(fontsize=7)
