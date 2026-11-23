@@ -1,0 +1,13 @@
+{
+  "strategy": "hybrid",
+  "oracle": "perfect",
+  "seed": 0,
+  "n_labelled": 3715,
+  "f1_macro": 0.5931781483086006,
+  "balanced_acc": 0.5987818686331091,
+  "recall_melanoma": 0.5911949685534591,
+  "auc_macro": 0.9260086552647618,
+  "temperature": 0.9919491410255432,
+  "backbone": "tf_efficientnetv2_s.in21k_ft_in1k",
+  "n_views": 8
+}

@@ -1,9 +1,7 @@
 strategy,oracle,krippendorff_alpha,observed_agreement,expected_agreement,n_annotations,acc_Derm 1,acc_Derm 2,acc_Derm 3,acc_Derm 4,acc_Derm 5,label_accuracy_final
-hybrid,majority,0.5817,0.7167,0.3225,11145.0,0.9201,0.8813,0.8531,0.8019,0.7495,0.9464
+hybrid,majority,0.583,0.7171,0.3214,11145.0,0.9213,0.8804,0.8519,0.8038,0.7512,0.9472
 hybrid,perfect,,,,3715.0,,,,,,1.0
-hybrid,single,,,,3715.0,0.9218,0.8786,0.8524,0.7924,0.7611,0.8408
-hybrid,uniform,,,,3715.0,,,,,,0.903
+hybrid,single,,,,3715.0,0.9206,0.8774,0.8495,0.7927,0.7601,0.8395
 random,majority,0.5369,0.7155,0.3857,11145.0,0.9198,0.8811,0.8508,0.8002,0.7506,0.9454
 random,perfect,,,,3715.0,,,,,,1.0
 random,single,,,,3715.0,0.9191,0.8755,0.8492,0.795,0.7582,0.8389
-random,uniform,,,,3715.0,,,,,,0.903

@@ -64,7 +64,7 @@ def main():
         def last(df):
             d = df[df.cycle == df.cycle.max()].set_index("seed")
             return d.test_f1.loc[seeds]
-        rows.append(make_row(strategy, "test F1, mesmas imagens (último ciclo)", last(maj), last(sin)))
+        rows.append(make_row(strategy, "test F1, same images (last cycle)", last(maj), last(sin)))
 
         # 2) mesmo custo humano, F1 de validação interpolado por seed
         def curve(df, s):
@@ -78,7 +78,7 @@ def main():
         for c in np.linspace(lo, hi, 3):
             a = pd.Series({s: np.interp(c, *curve(maj, s)) for s in seeds})
             b = pd.Series({s: np.interp(c, *curve(sin, s)) for s in seeds})
-            rows.append(make_row(strategy, f"val F1, mesmo custo ({c:.0f} anotações)", a, b))
+            rows.append(make_row(strategy, f"val F1, same cost ({c:.0f} annotations)", a, b))
 
     out = pd.DataFrame(rows)
     out["p_holm"] = holm(out.p.fillna(1.0))
