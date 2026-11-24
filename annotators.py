@@ -1,32 +1,32 @@
 """
-Anotadores (dermatologistas) simulados e métricas de qualidade das anotações.
+Simulated annotators (dermatologists) and annotation quality metrics.
 
-Parte "Human-in-the-Loop" do projeto. Em vez de um oráculo perfeito (ou com ruído uniforme),
-simulamos um PAINEL de dermatologistas, cada um com a sua matriz de confusão, e medimos a
-qualidade das anotações com as métricas da folha "Human-in-the-Loop Machine Learning:
-annotation quality frameworks" (Munro): exatidão face ao ground truth, acordo entre
-anotadores, acordo com a maioria, alpha de Krippendorff e matriz de confusão por anotador.
+"Human-in-the-Loop" part of the project. Instead of a perfect oracle (or one with uniform noise),
+we simulate a PANEL of dermatologists, each with their own confusion matrix, and measure the
+quality of the annotations with the metrics of the spreadsheet "Human-in-the-Loop Machine Learning:
+annotation quality frameworks" (Munro): accuracy against the ground truth, agreement between
+annotators, agreement with the majority, Krippendorff's alpha and confusion matrix per annotator.
 
-Só depende de NumPy. Para validar contra a folha de cálculo: python annotators.py
+Depends only on NumPy. To validate against the spreadsheet: python annotators.py
 """
 import numpy as np
 
 CLASSES = ["akiec", "bcc", "bkl", "df", "mel", "nv", "vasc"]
 N_CLASSES = len(CLASSES)
-MISSING = -1          # "este anotador não anotou esta imagem"
+MISSING = -1          # "this annotator did not label this image"
 
 # ----------------------------------------------------------------------------------------
-# PRESSUPOSTOS DA SIMULAÇÃO (editar aqui; têm de ser justificados/calibrados no relatório)
+# SIMULATION ASSUMPTIONS (edit here; they must be justified/calibrated in the report)
 # ----------------------------------------------------------------------------------------
-# Exatidão global de cada dermatologista do painel. Valores ILUSTRATIVOS, não vêm da
-# literatura: substituir por valores citados (ou fazer análise de sensibilidade).
+# Overall accuracy of each dermatologist of the panel. ILLUSTRATIVE values, not taken from the
+# literature: replace with cited values (or run a sensitivity analysis).
 PANEL_ACCURACY = [0.92, 0.88, 0.85, 0.80, 0.75]
 PANEL_NAMES = [f"Derm {i + 1}" for i in range(len(PANEL_ACCURACY))]
 
-# Estrutura dos erros: quando um dermatologista erra, para que classe tende a ir?
-# Pesos relativos (linhas = classe verdadeira). Inspirada nos erros da matriz de confusão do
-# modelo (mel<->nv, bkl<->mel, akiec<->bcc/bkl) e em confusões dermatoscópicas comuns.
-# É uma hipótese de modelação, não um resultado empírico.
+# Error structure: when a dermatologist makes a mistake, which class do they tend to pick?
+# Relative weights (rows = true class). Inspired by the errors in the confusion matrix of the
+# model (mel<->nv, bkl<->mel, akiec<->bcc/bkl) and by common dermoscopic confusions.
+# It is a modelling assumption, not an empirical result.
 _CONFUSION_WEIGHTS = {
     "akiec": {"bcc": 2, "bkl": 2, "mel": 1},
     "bcc":   {"akiec": 2, "bkl": 1, "mel": 1},
@@ -39,7 +39,7 @@ _CONFUSION_WEIGHTS = {
 
 
 def error_structure():
-    """Matriz (7x7) com a distribuição dos erros por classe verdadeira (diagonal = 0)."""
+    """7x7 matrix with the distribution of the errors for each true class (diagonal = 0)."""
     S = np.zeros((N_CLASSES, N_CLASSES))
     for true_c, targets in _CONFUSION_WEIGHTS.items():
         for wrong_c, w in targets.items():
@@ -48,23 +48,23 @@ def error_structure():
 
 
 def annotator_confusion(accuracy):
-    """Matriz de confusão de um anotador: P(etiqueta dada | classe verdadeira)."""
+    """Confusion matrix of one annotator: P(given label | true class)."""
     C = (1 - accuracy) * error_structure()
     C[np.diag_indices(N_CLASSES)] = accuracy
     return C
 
 
 def make_panel(accuracies=None):
-    """Lista de matrizes de confusão, uma por dermatologista do painel."""
+    """List of confusion matrices, one per dermatologist of the panel."""
     accuracies = PANEL_ACCURACY if accuracies is None else accuracies
     return [annotator_confusion(a) for a in accuracies]
 
 
 # ----------------------------------------------------------------------------------------
-# ORÁCULOS
+# ORACLES
 # ----------------------------------------------------------------------------------------
 def _sample_labels(C, y_true, rng):
-    """Uma etiqueta por imagem, amostrada da matriz de confusão C."""
+    """One label per image, sampled from the confusion matrix C."""
     cdf = C[y_true].cumsum(axis=1)
     u = rng.random(len(y_true))[:, None]
     return np.minimum((u > cdf).sum(axis=1), N_CLASSES - 1)
@@ -72,13 +72,13 @@ def _sample_labels(C, y_true, rng):
 
 class Oracle:
     """
-    Responde aos pedidos do Active Learning. kind:
-      perfect      : etiqueta correta (o que o código original fazia)
-      uniform      : erra uma fração `p` das imagens, para uma classe ao acaso (ruído uniforme)
-      single       : cada imagem é vista por UM dermatologista do painel, escolhido ao acaso
-      majority     : cada imagem é vista por `k` dermatologistas distintos e vale o voto de maioria
-    annotate() devolve (etiquetas finais, votos (n, n_painel) com MISSING, nº de anotações).
-    O custo humano é o nº de anotações (uma imagem vista por 3 médicos custa 3).
+    Answers the requests of the active learning loop. kind:
+      perfect      : correct label (what the original code did)
+      uniform      : a fraction `p` of the images gets a random wrong class (uniform noise)
+      single       : each image is seen by ONE dermatologist of the panel, chosen at random
+      majority     : each image is seen by `k` different dermatologists and the majority vote wins
+    annotate() returns (final labels, votes (n, n_panel) with MISSING, number of annotations).
+    The human cost is the number of annotations (an image seen by 3 doctors costs 3).
     """
 
     def __init__(self, kind, rng, panel=None, k=3, p=0.10):
@@ -88,6 +88,7 @@ class Oracle:
         self.P = len(self.panel)
 
     def annotate(self, y_true):
+        """Labels the images whose true classes are y_true, according to the type of oracle."""
         n = len(y_true)
         votes = np.full((n, self.P), MISSING, dtype=int)
         if self.kind == "perfect":
@@ -98,7 +99,7 @@ class Oracle:
             y[wrong] = (y_true[wrong] + self.rng.integers(1, N_CLASSES, wrong.sum())) % N_CLASSES
             return y, votes, n
         k = 1 if self.kind == "single" else self.k
-        # k anotadores distintos por imagem, escolhidos ao acaso
+        # k different annotators per image, chosen at random
         chosen = np.argsort(self.rng.random((n, self.P)), axis=1)[:, :k]
         for a in range(self.P):
             rows = np.where((chosen == a).any(axis=1))[0]
@@ -108,16 +109,16 @@ class Oracle:
 
 
 def majority_vote(votes, rng):
-    """Voto de maioria por imagem; empates resolvidos ao acaso entre as classes empatadas."""
+    """Majority vote per image; ties are broken at random between the tied classes."""
     counts = np.stack([(votes == c).sum(axis=1) for c in range(N_CLASSES)], axis=1)
-    return (counts + rng.random(counts.shape) * 0.5).argmax(axis=1)   # ruído < 1: só desempata
+    return (counts + rng.random(counts.shape) * 0.5).argmax(axis=1)   # noise < 1: it only breaks ties
 
 
 # ----------------------------------------------------------------------------------------
-# MÉTRICAS DE QUALIDADE DAS ANOTAÇÕES (equivalentes às abas da folha de cálculo)
+# ANNOTATION QUALITY METRICS (equivalent to the tabs of the spreadsheet)
 # ----------------------------------------------------------------------------------------
 def accuracy_vs_truth(votes, y_true):
-    """Exatidão de cada anotador face ao ground truth (aba 'Accuracy Ground Truth')."""
+    """Accuracy of each annotator against the ground truth (tab 'Accuracy Ground Truth')."""
     out = np.full(votes.shape[1], np.nan)
     for a in range(votes.shape[1]):
         m = votes[:, a] != MISSING
@@ -128,8 +129,8 @@ def accuracy_vs_truth(votes, y_true):
 
 def per_annotator_agreement(votes):
     """
-    Acordo de cada anotador com os OUTROS anotadores da mesma tarefa (excluindo-se a si próprio),
-    média sobre as tarefas em que há pelo menos 2 anotadores (abas 'Partial Krippendorff's').
+    Agreement of each annotator with the OTHER annotators of the same task (excluding themselves),
+    averaged over the tasks with at least 2 annotators (tabs 'Partial Krippendorff's').
     """
     P = votes.shape[1]
     ok = (votes != MISSING).sum(axis=1) >= 2
@@ -145,7 +146,7 @@ def per_annotator_agreement(votes):
 
 
 def majority_agreement(votes, rng=None):
-    """Fração das anotações de cada anotador que coincide com o voto de maioria da tarefa."""
+    """Fraction of the annotations of each annotator that match the majority vote of the task."""
     rng = np.random.default_rng(0) if rng is None else rng
     ok = (votes != MISSING).sum(axis=1) >= 2
     maj = majority_vote(votes[ok], rng)
@@ -159,20 +160,20 @@ def majority_agreement(votes, rng=None):
 
 def krippendorff_alpha(votes):
     """
-    Alpha de Krippendorff para etiquetas nominais com anotações em falta, com a mesma fórmula
-    da folha (aba 'Krippendorffs alpha', pesos de etiqueta = identidade):
-        p_i  = sum_k r_ik (r_ik - 1) / (r_medio (r_i - 1))        acordo ponderado da tarefa i
-        p_a  = media(p_i) (1 - eps) + eps,   eps = 1 / (n r_medio)
-        p_e  = sum_k pi_k^2,                 pi_k = contagem_k / (n r_medio)
+    Krippendorff's alpha for nominal labels with missing annotations, with the same formula as
+    the spreadsheet (tab 'Krippendorffs alpha', label weights = identity):
+        p_i  = sum_k r_ik (r_ik - 1) / (r_mean (r_i - 1))         weighted agreement of task i
+        p_a  = mean(p_i) (1 - eps) + eps,    eps = 1 / (n r_mean)
+        p_e  = sum_k pi_k^2,                 pi_k = count_k / (n r_mean)
         alpha = (p_a - p_e) / (1 - p_e)
-    Só entram tarefas com >= 2 anotações. Devolve (alpha, p_a, p_e).
+    Only tasks with >= 2 annotations are used. Returns (alpha, p_a, p_e).
     """
     ok = (votes != MISSING).sum(axis=1) >= 2
     v = votes[ok]
     n = len(v)
     if n == 0:
         return np.nan, np.nan, np.nan
-    R = np.stack([(v == c).sum(axis=1) for c in range(N_CLASSES)], axis=1)   # (n, K) contagens
+    R = np.stack([(v == c).sum(axis=1) for c in range(N_CLASSES)], axis=1)   # (n, K) counts
     r = R.sum(axis=1)
     r_bar = r.mean()
     p_i = (R * (R - 1)).sum(axis=1) / (r_bar * (r - 1))
@@ -184,7 +185,7 @@ def krippendorff_alpha(votes):
 
 
 def confusion_per_annotator(votes, y_true, a):
-    """Matriz de confusão de um anotador: linhas = real, colunas = etiqueta dada."""
+    """Confusion matrix of one annotator: rows = true class, columns = given label."""
     m = votes[:, a] != MISSING
     cm = np.zeros((N_CLASSES, N_CLASSES), dtype=int)
     np.add.at(cm, (y_true[m], votes[m, a]), 1)
@@ -192,7 +193,7 @@ def confusion_per_annotator(votes, y_true, a):
 
 
 def quality_report(votes, y_true, final_labels=None, names=None):
-    """Resumo único das métricas, pronto para ir para uma tabela do relatório."""
+    """Single summary of the metrics, ready to go into a table of the report."""
     names = PANEL_NAMES if names is None else names
     alpha, p_a, p_e = krippendorff_alpha(votes)
     rep = dict(krippendorff_alpha=alpha, observed_agreement=p_a, expected_agreement=p_e,
@@ -205,10 +206,10 @@ def quality_report(votes, y_true, final_labels=None, names=None):
 
 
 # ----------------------------------------------------------------------------------------
-# VALIDAÇÃO CONTRA A FOLHA DE CÁLCULO DO PROFESSOR
+# VALIDATION AGAINST THE PROFESSOR'S SPREADSHEET
 # ----------------------------------------------------------------------------------------
 def _sheet_example():
-    """Dados da folha (Alex, Blake, Cameron, Dancer/Drew, Evan; tarefas 1 a 11)."""
+    """Data of the spreadsheet (Alex, Blake, Cameron, Dancer/Drew, Evan; tasks 1 to 11)."""
     lab = {"Pedestrian": 0, "Sign": 1, "Cyclist": 2, "Animal": 3}
     rows = [
         ["Pedestrian", "Pedestrian", "Pedestrian", None, None],
@@ -221,7 +222,7 @@ def _sheet_example():
         ["Animal", "Animal", None, "Animal", None],
         ["Sign", None, "Animal", "Animal", "Animal"],
         [None, "Sign", "Sign", None, "Sign"],
-        [None, "Animal", None, None, None],      # tarefa 11: 1 só anotação (fora do alpha)
+        [None, "Animal", None, None, None],      # task 11: only 1 annotation (left out of alpha)
     ]
     gt = ["Pedestrian", "Sign", "Cyclist", "Cyclist", "Pedestrian",
           "Cyclist", "Pedestrian", "Animal", "Animal", "Sign", "Animal"]
@@ -230,22 +231,23 @@ def _sheet_example():
 
 
 def selftest():
+    """Checks the metrics against the values of the spreadsheet."""
     global N_CLASSES
-    old, N_CLASSES = N_CLASSES, 4       # a folha usa 4 etiquetas
+    old, N_CLASSES = N_CLASSES, 4       # the spreadsheet uses 4 labels
     try:
         votes, gt = _sheet_example()
         alpha, p_a, p_e = krippendorff_alpha(votes)
         acc = accuracy_vs_truth(votes, gt)
         agr = per_annotator_agreement(votes)
-        print(f"alpha = {alpha:.6f}   (folha: 0.803103)")
-        print(f"p_a   = {p_a:.6f}   (folha: 0.857266)   p_e = {p_e:.6f}   (folha: 0.275087)")
-        print("exatidão vs GT:", np.round(acc, 6), "  (folha: 0.714286 0.9 1 1 0.75)")
-        print("acordo (self-excluded):", np.round(agr, 6))
+        print(f"alpha = {alpha:.6f}   (sheet: 0.803103)")
+        print(f"p_a   = {p_a:.6f}   (sheet: 0.857266)   p_e = {p_e:.6f}   (sheet: 0.275087)")
+        print("accuracy vs GT:", np.round(acc, 6), "  (sheet: 0.714286 0.9 1 1 0.75)")
+        print("agreement (self-excluded):", np.round(agr, 6))
         assert abs(alpha - 0.803103) < 1e-6 and abs(p_a - 0.857266) < 1e-6
         assert abs(p_e - 0.275087) < 1e-6
         assert np.allclose(acc, [0.714286, 0.9, 1, 1, 0.75], atol=1e-6)
-        assert abs(agr[0] - 0.785714) < 1e-6        # 'Annotator Average Agreement' do Alex
-        print("OK: coincide com a folha de cálculo.")
+        assert abs(agr[0] - 0.785714) < 1e-6        # 'Annotator Average Agreement' of Alex
+        print("OK: matches the spreadsheet.")
     finally:
         N_CLASSES = old
 

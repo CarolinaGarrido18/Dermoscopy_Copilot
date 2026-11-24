@@ -13,6 +13,7 @@ import os
 from glob import glob
 from pathlib import Path
 
+import kagglehub
 import numpy as np
 import pandas as pd
 import timm
@@ -23,8 +24,9 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
 
-# Location of the HAM10000 images (kagglehub cache; adjust to your machine)
-PATH_IMG = "C:\\Users\\carol\\.cache\\kagglehub\\datasets\\kmader\\skin-cancer-mnist-ham10000\\versions\\2"
+# Location of the HAM10000 images: kagglehub returns the local cache folder (it only downloads the
+# dataset if it is not there yet)
+PATH_IMG = kagglehub.dataset_download("kmader/skin-cancer-mnist-ham10000")
 
 # Pre-trained network from timm; it also names the output folder, so the same value must be
 # used in the baseline script to load the correct features
@@ -33,7 +35,7 @@ BACKBONE = "tf_efficientnetv2_s.in21k_ft_in1k"
 BASE = Path(__file__).parent
 SPLITS_DIR = BASE / "splits"
 OUT_DIR = BASE / "features" / f"features_{BACKBONE}"    # must match BACKBONE in the train_baseline script
-OUT_DIR.mkdir(exist_ok=True)
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 BATCH_SIZE = 16        
 N_AUG = 2   # augmented copies generated per training image      
@@ -93,25 +95,25 @@ def extrair(model, loader, device, tta):
 
 
 def main():
-    # image_id -> ficheiro .jpg
+    # image_id -> path of the .jpg file
     img_paths = {
         os.path.splitext(os.path.basename(f))[0]: f
         for f in glob(os.path.join(PATH_IMG, "*", "*.jpg"))
     }
-    print("Imagens encontradas:", len(img_paths))
+    print("Images found:", len(img_paths))
 
     # Model and preprocessing
     # The backbone is created without its final classification layer (num_classes=0),
     # so it outputs the feature vector
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print("Dispositivo:", device, "| Backbone:", BACKBONE)
+    print("Device:", device, "| Backbone:", BACKBONE)
     model = timm.create_model(BACKBONE, pretrained=True, num_classes=0)
     model.eval().to(device)
 
     # Input size, mean and std come from the backbone's own pre-training configuration
     cfg = resolve_data_config({}, model=model)
     SIZE = cfg["input_size"][1]
-    print(f"Tamanho de entrada: {SIZE} | features: {model.num_features}")
+    print(f"Input size: {SIZE} | features: {model.num_features}")
 
     norm = transforms.Normalize(mean=cfg["mean"], std=cfg["std"])
 
@@ -167,9 +169,9 @@ def main():
         # Save as compressed .npz with X (features), y (labels), image_ids and aug_idx
         np.savez_compressed(OUT_DIR / f"{split}_features.npz",
                             X=X, y=y, image_ids=ids, aug_idx=aug)
-        print(f"\n[{split}] X: {X.shape} | y: {y.shape} -> guardado")
+        print(f"\n[{split}] X: {X.shape} | y: {y.shape} -> saved")
 
-    print("\nConcluído. Ficheiros em:", OUT_DIR)
+    print("\nDone. Files in:", OUT_DIR)
 
 
 if __name__ == "__main__":

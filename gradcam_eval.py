@@ -1,24 +1,24 @@
 """
-Grad-CAM vs máscaras de lesão: o modelo olha para a lesão? E isso muda com o nº de etiquetas?
+Grad-CAM vs lesion masks: does the model look at the lesion? And does that change with the number of labels?
 
 Pipeline:
-  1. backbone EfficientNetV2-S congelado (timm) -> mapa de ativação A (B, 1280, h, w) da última
-     camada convolucional, uma só vez por imagem;
-  2. para cada cabeça linear guardada (baseline passivo + cabeças do AL em vários orçamentos de
-     etiquetas, de al_hitl.py): CAM da classe PREVISTA, ReLU, upsample, normalização por máximo;
-  3. métricas de localização contra a máscara (cam_metrics.py) em todo o conjunto de teste.
+  1. frozen EfficientNetV2-S backbone (timm) -> activation map A (B, 1280, h, w) of the last
+     convolutional layer, computed only once per image;
+  2. for each saved linear head (passive baseline + AL heads at several labelling budgets,
+     from al_hitl.py): CAM of the PREDICTED class, ReLU, upsampling, normalisation by the maximum;
+  3. localisation metrics against the mask (cam_metrics.py) over the whole test set.
 
-Nota sobre o Grad-CAM. O classificador é pooling médio + camada linear, logo
-dlogit_c/dA[k,h,w] = W[c,k]/(h*w) e os pesos do Grad-CAM (alpha_k = média do gradiente) são
-proporcionais a W[c,k]. O Grad-CAM tem então esta forma fechada (coincide com o CAM de Zhou et al.),
-que é o que se calcula aqui. `--verify` confirma-o contra o Grad-CAM por autograd, numa batch.
-O mapa é calculado sobre a vista ORIGINAL (sem TTA).
+Note on Grad-CAM. The classifier is average pooling + a linear layer, so
+dlogit_c/dA[k,h,w] = W[c,k]/(h*w) and the Grad-CAM weights (alpha_k = mean of the gradient) are
+proportional to W[c,k]. Grad-CAM therefore has this closed form (it matches the CAM of Zhou et al.),
+which is what is computed here. `--verify` checks it against Grad-CAM computed with autograd, on one batch.
+The map is computed over the ORIGINAL view (without TTA).
 
-Uso:
-  python gradcam_eval.py --verify --max-images 64      # teste rápido
-  python gradcam_eval.py                               # conjunto de teste completo
-Pré-requisitos: splits/test.csv, baseline_head.pt, results/heads/*.pt (al_hitl.py), imagens e
-máscaras (por omissão obtidas com kagglehub; ou --img-dir / --mask-dir).
+Usage:
+  python gradcam_eval.py --verify --max-images 64      # quick test
+  python gradcam_eval.py                               # full test set
+Prerequisites: splits/test.csv, baseline_head.pt, results/heads/*.pt (al_hitl.py), images and
+masks (by default obtained with kagglehub; or --img-dir / --mask-dir).
 """
 import argparse
 import os
@@ -40,16 +40,17 @@ from torchvision import transforms
 
 from cam_metrics import localisation_metrics
 
-BACKBONE = "tf_efficientnetv2_s.in21k_ft_in1k"          # igual ao de extract_features.py
+BACKBONE = "tf_efficientnetv2_s.in21k_ft_in1k"          # same as in extract_features.py
 CLASSES = ["akiec", "bcc", "bkl", "df", "mel", "nv", "vasc"]
 CLASS_TO_IDX = {c: i for i, c in enumerate(CLASSES)}
 METRICS = ["energy_in_mask", "energy_ratio", "pointing_game", "iou", "border_ratio"]
 
 
 # ------------------------------------------------------------------------------------------
-# Dados
+# Data
 # ------------------------------------------------------------------------------------------
 class TestSet(Dataset):
+    # Test images with their lesion masks; returns (transformed image, boolean mask, row index)
     def __init__(self, df, img_paths, mask_paths, tf, size):
         self.df, self.img_paths, self.mask_paths = df.reset_index(drop=True), img_paths, mask_paths
         self.tf, self.size = tf, size
@@ -65,9 +66,10 @@ class TestSet(Dataset):
 
 
 def find_files(args):
+    """Builds the dictionaries {image_id: path} for the images and for the lesion masks."""
     img_dir, mask_dir = args.img_dir, args.mask_dir
     if img_dir is None or mask_dir is None:
-        import kagglehub                                   # devolve a cache se já foi descarregado
+        import kagglehub                                   # returns the cache if it was already downloaded
         img_dir = img_dir or kagglehub.dataset_download("kmader/skin-cancer-mnist-ham10000")
         mask_dir = mask_dir or kagglehub.dataset_download("tschandl/ham10000-lesion-segmentations")
     imgs = {os.path.splitext(os.path.basename(f))[0]: f
@@ -75,7 +77,7 @@ def find_files(args):
     masks = {os.path.basename(f)[:-len("_segmentation.png")]: f
              for f in glob(os.path.join(mask_dir, "**", "*_segmentation.png"), recursive=True)}
     if not masks:
-        raise SystemExit(f"Não encontrei máscaras '*_segmentation.png' em {mask_dir}")
+        raise SystemExit(f"No '*_segmentation.png' masks found in {mask_dir}")
     return imgs, masks
 
 
@@ -84,7 +86,7 @@ def find_files(args):
 # ------------------------------------------------------------------------------------------
 @torch.no_grad()
 def compute_cam(A, W, b, size):
-    """A (B,C,h,w), W (7,C), b (7). CAM da classe prevista, upsampled e normalizado por máximo."""
+    """A (B,C,h,w), W (7,C), b (7). CAM of the predicted class, upsampled and normalised by the maximum."""
     pred = (A.mean(dim=(2, 3)) @ W.T + b).argmax(1)
     cam = torch.relu(torch.einsum("bchw,bc->bhw", A, W[pred]))
     cam = F.interpolate(cam[:, None], size=(size, size), mode="bilinear", align_corners=False)[:, 0]
@@ -93,7 +95,7 @@ def compute_cam(A, W, b, size):
 
 
 def verify_equivalence(backbone, W, b, x, device):
-    """Compara a fórmula fechada com o Grad-CAM por autograd (gradiente em relação a A)."""
+    """Compares the closed formula with Grad-CAM computed with autograd (gradient with respect to A)."""
     with torch.no_grad():
         A = backbone.forward_features(x).float()
     A = A.detach().requires_grad_(True)
@@ -106,14 +108,15 @@ def verify_equivalence(backbone, W, b, x, device):
     gc, cf = gc / gc.flatten(1).max(1).values.clamp_min(1e-8)[:, None, None], \
         cf / cf.flatten(1).max(1).values.clamp_min(1e-8)[:, None, None]
     err = (gc - cf).abs().max().item()
-    print(f"[verify] erro máximo Grad-CAM (autograd) vs fórmula fechada: {err:.2e}")
-    assert err < 1e-4, "A fórmula fechada não coincide com o Grad-CAM por autograd"
+    print(f"[verify] maximum error Grad-CAM (autograd) vs closed formula: {err:.2e}")
+    assert err < 1e-4, "The closed formula does not match Grad-CAM computed with autograd"
 
 
 # ------------------------------------------------------------------------------------------
-# Cabeças guardadas
+# Saved heads
 # ------------------------------------------------------------------------------------------
 def collect_heads(args, n_train, device):
+    """Loads the passive baseline head and the AL heads closest to each labelling budget."""
     heads = []
     base = args.baseline
     if not os.path.exists(base):
@@ -144,6 +147,7 @@ def collect_heads(args, n_train, device):
 
 # ------------------------------------------------------------------------------------------
 def outcome(true, pred):
+    """Type of result of one prediction (correct, the two mel <-> nv errors, or another error)."""
     t, p = CLASSES[true], CLASSES[pred]
     if t == p:
         return "correct"
@@ -155,15 +159,16 @@ def outcome(true, pred):
 
 
 def main():
+    """Computes the CAMs and the localisation metrics of every head, then saves the tables and figures."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--img-dir"), ap.add_argument("--mask-dir")
     ap.add_argument("--splits", default="splits")
     ap.add_argument("--heads-dir", default="results/heads")
     ap.add_argument("--baseline", default=f"results/results_baseline/results_{BACKBONE}/baseline_head.pt")
     ap.add_argument("--oracles", nargs="+", default=["perfect", "majority"])
-    ap.add_argument("--seeds", type=int, default=3, help="nº de seeds (cabeças guardadas) a avaliar")
+    ap.add_argument("--seeds", type=int, default=3, help="number of seeds (saved heads) to evaluate")
     ap.add_argument("--budgets", nargs="+", type=float, default=[0.10, 0.30, 0.50],
-                    help="fração do treino etiquetada (usa o ciclo guardado mais próximo)")
+                    help="fraction of the training set labelled (uses the closest saved cycle)")
     ap.add_argument("--max-images", type=int, default=None)
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--verify", action="store_true")
@@ -172,7 +177,7 @@ def main():
     os.makedirs("results/figures", exist_ok=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # modelo e pré-processamento: exatamente os de extract_features.py
+    # model and preprocessing: exactly the same as in extract_features.py
     backbone = timm.create_model(BACKBONE, pretrained=True, num_classes=0).eval().to(device)
     cfg = resolve_data_config({}, model=backbone)
     size = cfg["input_size"][1]
@@ -184,7 +189,7 @@ def main():
     n_train = len(pd.read_csv(os.path.join(args.splits, "train.csv")))
     have = df.image_id.isin(masks) & df.image_id.isin(imgs)
     if not have.all():
-        print(f"AVISO: {int((~have).sum())} imagens de teste sem imagem/máscara; ignoradas.")
+        print(f"WARNING: {int((~have).sum())} test images without image/mask; skipped.")
     df = df[have]
     if args.max_images:
         df = df.sample(min(args.max_images, len(df)), random_state=0)
@@ -194,13 +199,13 @@ def main():
     loader = DataLoader(ds, batch_size=args.batch, shuffle=False, num_workers=0)
 
     heads = collect_heads(args, n_train, device)
-    print(f"{len(df)} imagens de teste | {len(heads)} cabeças | input {size}x{size}")
+    print(f"{len(df)} test images | {len(heads)} heads | input {size}x{size}")
 
     if args.verify:
         x, _, _ = next(iter(loader))
         verify_equivalence(backbone, heads[0]["W"], heads[0]["b"], x.to(device), device)
 
-    # ---- métricas para todas as cabeças (backbone calculado uma só vez por batch) ----
+    # ---- metrics for all the heads (the backbone is run only once per batch) ----
     acc = [{k: [] for k in ["idx", "pred"] + METRICS + ["mask_area", "cam_empty"]} for _ in heads]
     for bi, (x, m, idx) in enumerate(loader):
         x = x.to(device)
@@ -228,15 +233,15 @@ def main():
     per_img = pd.concat(frames, ignore_index=True)
     per_img.to_csv("results/tables/gradcam_per_image.csv", index=False)
 
-    # ---- 1) interpretabilidade vs nº de etiquetas (média por cabeça, depois sobre seeds) ----
+    # ---- 1) interpretability vs number of labels (mean per head, then over seeds) ----
     keys = ["kind", "strategy", "oracle", "n_labelled"]
     per_head = per_img.groupby(keys + ["seed"])[METRICS + ["cam_empty"]].mean().reset_index()
     summ = per_head.groupby(keys)[METRICS + ["cam_empty"]].agg(["mean", "std"]).round(4)
     summ.to_csv("results/tables/gradcam_summary.csv")
-    print("\nLocalização do Grad-CAM (média sobre imagens e depois sobre seeds):")
+    print("\nGrad-CAM localisation (mean over images and then over seeds):")
     print(summ[[(m, "mean") for m in METRICS]].to_string())
 
-    # ---- 2) por classe e por tipo de resultado (inclui mel <-> nv), para o modelo passivo e para o modelo final do AL (hybrid, perfect, seed 0, último ciclo), que é o usado pelo referral e pela app ----
+    # ---- 2) by class and by type of result (includes mel <-> nv), for the passive model and for the final AL model (hybrid, perfect, seed 0, last cycle), which is the one used by the referral and by the app ----
     base = per_img[per_img.kind == "passive"]
     al_all = per_img[per_img.kind == "AL"]
     final_al = al_all[(al_all.strategy == "hybrid") & (al_all.oracle == "perfect") & (al_all.seed == 0) & (al_all.n_labelled == al_all.n_labelled.max())]
@@ -250,9 +255,9 @@ def main():
             rows.append(t)
     byg = pd.concat(rows)
     byg.to_csv("results/tables/gradcam_by_group.csv")
-    print("\nPor grupo (modelo passivo e modelo final do AL):\n", byg.to_string())
+    print("\nBy group (passive model and final AL model):\n", byg.to_string())
 
-    # ---- 3) figura: métricas vs etiquetas ----
+    # ---- 3) figure: metrics vs labels ----
     al = per_head[per_head.kind == "AL"].groupby(["strategy", "oracle", "n_labelled"])[METRICS].agg(
         ["mean", "std"])
     ref = per_head[per_head.kind == "passive"][METRICS].mean()
@@ -275,7 +280,7 @@ def main():
     fig.tight_layout()
     fig.savefig("results/figures/gradcam_vs_labels.png", dpi=200)
 
-    # ---- 4) exemplos qualitativos ----
+    # ---- 4) qualitative examples ----
     bidx = base.set_index("image_id")
     cases = [("correct melanoma", (base.true == 4) & (base.pred == 4)),
         ("correct nevus", (base.true == 5) & (base.pred == 5)),
@@ -307,7 +312,7 @@ def main():
         ax.axis("off")
     fig.tight_layout()
     fig.savefig("results/figures/gradcam_examples.png", dpi=170)
-    print("\nGuardado: results/tables/gradcam_*.csv, results/figures/gradcam_*.png")
+    print("\nSaved: results/tables/gradcam_*.csv, results/figures/gradcam_*.png")
 
 
 if __name__ == "__main__":

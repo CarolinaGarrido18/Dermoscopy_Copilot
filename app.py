@@ -2,7 +2,8 @@
 Dermoscopy Copilot - Streamlit       
 Run (from the repository root): streamlit run app.py
 Prediction = final active learning model (al_head.pt), calibrated, with TTA x8 and the same calibration as referral.py.
-Heat map = CAM of the predicted class of that same model over the original view (closed formula of gradcam_eval.py).
+Heat map = CAM (closed formula of gradcam_eval.py) over the original view, for the class predicted with TTA
+(gradcam_eval.py picks the class from the original view only, so in borderline cases the class can differ).
 Prerequisite: results/results_active_learning/al_head.pt (export_al_head.py).
 """
 import csv
@@ -22,7 +23,7 @@ from copilot_common import (CLASSES, IMG_DIR, LOG_CSV, calibrate, device, load_b
 # referral.py: low confidence OR melanoma risk -> human in the loop
 CONF_X = 0.80  # minimum confidence for the model to be trusted on its own    
 MEL_RISK_THR = 0.20  # melanoma probability from which the case is always referred
-MEL_IDX = CLASSES.index("mel") # melanoma probability from which the case is always referred
+MEL_IDX = CLASSES.index("mel") # index of the melanoma class
 # Columns of the feedback log (one row per clinician decision)
 LOG_COLS = ["timestamp", "image_file", "pred_class", "confidence", "mel_prob",
             "sent_to_human", "action", "final_label", "disagreement"]

@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 import matplotlib
-matplotlib.use("Agg")  # só grava a figura em ficheiro
+matplotlib.use("Agg")  # only saves the figure to a file
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -27,7 +27,7 @@ BACKBONE = "tf_efficientnetv2_s.in21k_ft_in1k"   # must match BACKBONE in extrac
 
 BASE = Path(__file__).parent
 FEATS = BASE / "features"/ f"features_{BACKBONE}"  # input: features extracted for this backbone
-OUT = BASE / "results" / f"results_{BACKBONE}"  # output: head weights, metrics and confusion matrix
+OUT = BASE / "results" / "results_baseline" / f"results_{BACKBONE}"  # output: head weights, metrics and confusion matrix
 OUT.mkdir(exist_ok=True)
 
 CLASSES = ["akiec", "bcc", "bkl", "df", "mel", "nv", "vasc"]
@@ -128,13 +128,13 @@ X_va, y_va, _ = carregar("val")
 X_te, y_te, _ = carregar("test")
 D = X_tr.shape[1] # feature dimension of the backbone
 print(f"Backbone: {BACKBONE} | features: {D}")
-print("Treino:", tuple(X_tr.shape), "| originais:", int((aug_tr == 0).sum()),
-      "| val:", tuple(X_va.shape), "| teste:", tuple(X_te.shape))
+print("Train:", tuple(X_tr.shape), "| originals:", int((aug_tr == 0).sum()),
+      "| val:", tuple(X_va.shape), "| test:", tuple(X_te.shape))
 
 # "balanced" weights computed only on the original images (aug_idx == 0), so that the
 # augmented copies do not distort the class frequencies
 pesos = compute_class_weight("balanced", classes=np.arange(7), y=y_tr[aug_tr == 0].numpy())
-print("Pesos das classes:", {c: round(float(p), 2) for c, p in zip(CLASSES, pesos)})
+print("Class weights:", {c: round(float(p), 2) for c, p in zip(CLASSES, pesos)})
 loss_fn = nn.CrossEntropyLoss(weight=torch.tensor(pesos, dtype=torch.float32))
 
 # Training the classification layer (D -> 7) 
@@ -156,9 +156,9 @@ for ep in range(1, EPOCHS + 1):
     # Evaluate on validation with TTA, so model selection mirrors test-time inference
     head.eval()
     with torch.no_grad():
-        p_va = probs_tta(logits_vistas(head, X_va))          # validação já com TTA
+        p_va = probs_tta(logits_vistas(head, X_va))          # validation already with TTA
     f1_val = f1_score(y_va, p_va.argmax(1), average="macro", zero_division=0)
-    print(f"Época {ep:3d} | loss {loss.item():.4f} | F1-macro val (TTA) {f1_val:.4f}")
+    print(f"Epoch {ep:3d} | loss {loss.item():.4f} | F1-macro val (TTA) {f1_val:.4f}")
 
     # Keep the weights with the best validation macro F1 (chosen over accuracy so that
     # minority malignant classes weigh equally); stop after PATIENCE epochs without improvement
@@ -188,13 +188,13 @@ res_sem, _ = avaliar_config(logits_va[:, :1], logits_te[:, :1], y_va, y_te)
 # Comparing both quantifies the gain brought by TTA
 chaves = ["balanced_acc", "precision_macro", "recall_macro", "f1_macro", "auc_macro",
           "recall_melanoma"]
-print(f"\n===== RESULTADOS NO TESTE ({BACKBONE}) =====")
-print(f"{'métrica':16s} {'sem TTA':>9s} {'com TTA':>9s}")
+print(f"\n===== TEST RESULTS ({BACKBONE}) =====")
+print(f"{'metric':16s} {'no TTA':>9s} {'with TTA':>9s}")
 for k in chaves:
     print(f"{k:16s} {res_sem[k]:9.4f} {res_tta[k]:9.4f}")
 print(f"{'T':16s} {res_sem['temperatura']:9.3f} {res_tta['temperatura']:9.3f}")
 print(f"{'ECE':16s} {res_sem['ece_depois']:9.4f} {res_tta['ece_depois']:9.4f}")
-print("Recall por classe (com TTA):",
+print("Recall per class (with TTA):",
       {c: round(r, 3) for c, r in res_tta["recall_por_classe"].items()})
 
 # Confusion matrix on the test set, with TTA. 
@@ -226,4 +226,4 @@ torch.save({"state_dict": head.state_dict(), "T": res_tta["temperatura"], "class
 with open(OUT / "baseline_metrics.json", "w", encoding="utf-8") as f:
     json.dump({**res_tta, "sem_tta": res_sem, "backbone": BACKBONE,
                "n_views": int(X_te.shape[1])}, f, indent=2)
-print("\nGuardado em:", OUT)
+print("\nSaved in:", OUT)
