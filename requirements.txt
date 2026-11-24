@@ -10,3 +10,4 @@ kagglehub
 tqdm
 scipy
 ipykernel
+streamlit
