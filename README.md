@@ -49,6 +49,7 @@ The notebooks document each phase and load the saved results in `results/`, so t
 ├── retrain_with_corrections.py     #    retraining with the clinician's corrections
 ├── notebooks/                      # 01 to 07, one per phase
 ├── splits/                         # train.csv, val.csv, test.csv
+├── app_data/                       # images reviewed in the app and feedback_log.csv (used to retrain the app model)
 ├── results/
 │   ├── results_baseline/           # baseline head and metrics for each backbone tested
 │   ├── results_active_learning/    # final active learning model and retrained model used by the app
@@ -61,8 +62,9 @@ The notebooks document each phase and load the saved results in `results/`, so t
 
 Not included in the repository (created when the code is run):
 
-- `features/`: extracted features (created by `extract_features.py`, listed in `.gitignore`);
-- `app_data/`: images reviewed in the app and the feedback log `feedback_log.csv` (created by `app.py`).
+- `features/`: extracted features (created by `extract_features.py`, listed in `.gitignore`).
+
+`app_data/` is created by `app.py`. The version in the repository holds the 21 decisions used to retrain the model of the app (see *Main results*); new decisions made in the app are appended to `feedback_log.csv`.
 
 ---
 
