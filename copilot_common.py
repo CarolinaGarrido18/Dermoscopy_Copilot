@@ -1,5 +1,6 @@
 """Shared by the app.py and by the retrain_with_corrections.py script. Mirrors extract_features.py, referral.py and gradcam_eval.py.
-The model used by the app is the final active learning head (al_head.pt, created by export_al_head.py).
+The model used by the app is the final active learning head (al_head.pt, created by export_al_head.py) retrained with the
+clinician's corrections (al_head_retrained.pt, created by retrain_with_corrections.py).
 """
 from pathlib import Path
 
@@ -16,7 +17,7 @@ BASE = Path(__file__).parent                       # repository root (folder whe
 FEATS = BASE / "features" / f"features_{BACKBONE}"  # pre-extracted features (train/val/test .npz files)
 RESULTS = BASE / "results" / "results_baseline" / f"results_{BACKBONE}"   # passive baseline (kept only for comparison)
 AL_DIR = BASE / "results" / "results_active_learning"                      # output folder of export_al_head.py
-HEAD_PATH = AL_DIR / "al_head.pt"                 # model of the app: final active learning head 
+HEAD_PATH = AL_DIR / "al_head_retrained.pt"       # model of the app: active learning head retrained with the clinician's corrections (al_head.pt is the original)
 AL_LABELLED = AL_DIR / "al_labelled.npz"          # images labelled by the active learning loop (ids + labels given)
 AL_METRICS = AL_DIR / "al_head_metrics.json"      # test metrics of the active learning head
 APP_DIR = BASE / "app_data"                       # everything the app produces at runtime

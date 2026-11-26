@@ -11,7 +11,7 @@ from PIL import Image
 from sklearn.metrics import balanced_accuracy_score, f1_score, recall_score
 
 from active_learning import LinearHead              # same model and training function as the active learning loop
-from copilot_common import (AL_DIR, AL_LABELLED, AL_METRICS, BACKBONE, CLASSES, FEATS, HEAD_PATH, IMG_DIR,
+from copilot_common import (AL_DIR, AL_LABELLED, AL_METRICS, BACKBONE, CLASSES, FEATS, IMG_DIR,
                             LOG_CSV, N_AUG, device, load_backbone)
 
 SEED, EPOCHS = 42, 3                                # EPOCHS = epochs per cycle in active_learning.py
@@ -130,7 +130,8 @@ X_all, y_all = torch.cat([X_tr, X_new]), torch.cat([y_tr, y_new])
 # One more active learning cycle: continue training the active learning head (not random weights) on the
 # labelled images + the clinician's images, exactly as ActiveLearner.teach does (fit with 3 epochs, no early stopping)
 model = LinearHead(seed=SEED, n_features=X_all.shape[1])
-model.net.load_state_dict(torch.load(HEAD_PATH, map_location="cpu")["state_dict"])  # warm start from al_head.pt
+# always warm start from the original al_head.pt (not HEAD_PATH, which the app may point to the retrained head)
+model.net.load_state_dict(torch.load(AL_DIR / "al_head.pt", map_location="cpu")["state_dict"])
 model.fit(X_all.numpy(), y_all.numpy(), epochs=EPOCHS)
 head = model.net.eval()
 
@@ -145,7 +146,7 @@ print(f"\n{'metric':16s} {'before':>8s} {'after':>8s}")
 for k in res:
     print(f"{k:16s} {antes[k]:8.4f} {res[k]:8.4f}")
 
-# al_head.pt is not overwritten; to use the retrained head in the app, point HEAD_PATH (copilot_common.py) to it
+# al_head.pt is not overwritten; the app uses al_head_retrained.pt through HEAD_PATH (copilot_common.py)
 torch.save({"state_dict": head.state_dict(), "T": T, "classes": CLASSES, "backbone": BACKBONE,
             "in_features": X_all.shape[1], "n_views": int(X_te.shape[1])},
            AL_DIR / "al_head_retrained.pt")

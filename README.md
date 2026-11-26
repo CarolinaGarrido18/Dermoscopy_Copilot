@@ -25,7 +25,7 @@ The final decision always belongs to the clinician: the system is a decision-sup
 | 4. Active learning | Compares 5 query strategies (least confidence, margin, entropy, hybrid and random) from 10% to ~52% of the labels, with 10 seeds, statistical tests and a noisy oracle | `active_learning.py`, `al_results.py`, `al_stats.py`, `al_labels_to_target.py`, `al_final.py` | `04_active_learning` |
 | 5. Human-in-the-loop | Replaces the oracle with a simulated panel of 5 dermatologists (one dermatologist or majority vote of 3), measures annotation quality and cost, exports the final model and evaluates the referral rule | `annotators.py`, `al_hitl.py`, `hitl_extra_stats.py`, `export_al_head.py`, `referral.py` | `05_human_in_the_loop` |
 | 6. Explainability | Compares the Grad-CAM heatmaps of the passive and active learning models with the lesion masks on the test set | `cam_metrics.py`, `gradcam_eval.py` | `06_gradcam` |
-| 7. Copilot app | Streamlit app with the final active learning model, and retraining with the clinician's corrections | `copilot_common.py`, `app.py`, `retrain_with_corrections.py` | `07_copilot_app` |
+| 7. Copilot app | Streamlit app with the active learning model retrained with the clinician's corrections, and the retraining script | `copilot_common.py`, `app.py`, `retrain_with_corrections.py` | `07_copilot_app` |
 
 The notebooks document each phase and load the saved results in `results/`, so they run in a few seconds without training anything. Each notebook has a `RETRAIN` / `RECOMPUTE` option to run the experiments again.
 
@@ -41,7 +41,7 @@ The notebooks document each phase and load the saved results in `results/`, so t
 ├── al_results.py / al_stats.py / al_labels_to_target.py / al_final.py
 ├── annotators.py                   # 5. simulated dermatologists and annotation quality metrics
 ├── al_hitl.py / hitl_extra_stats.py
-├── export_al_head.py               #    final active learning model for the app
+├── export_al_head.py               #    final active learning model (starting point of the retraining)
 ├── referral.py                     #    referral rule (human-in-the-loop / human-on-the-loop)
 ├── cam_metrics.py / gradcam_eval.py  # 6. Grad-CAM vs lesion masks
 ├── copilot_common.py               # 7. code shared by the app and the retraining script
@@ -51,7 +51,7 @@ The notebooks document each phase and load the saved results in `results/`, so t
 ├── splits/                         # train.csv, val.csv, test.csv
 ├── results/
 │   ├── results_baseline/           # baseline head and metrics for each backbone tested
-│   ├── results_active_learning/    # final active learning model used by the app
+│   ├── results_active_learning/    # final active learning model and retrained model used by the app
 │   ├── heads/                      # active learning heads saved at every cycle
 │   ├── tables/                     # all result tables (CSV)
 │   └── figures/                    # all result figures
@@ -123,7 +123,7 @@ The clinician uploads a dermoscopic image and sees the predicted category, its c
 python retrain_with_corrections.py
 ```
 
-The images validated or corrected in the app are added to the images labelled by the active learning loop, and the model is trained for one more active learning cycle. The new model is saved as `results/results_active_learning/al_head_retrained.pt` (it does not overwrite `al_head.pt`) and its test metrics are compared with the model before the retraining. To use it in the app, change `HEAD_PATH` in `copilot_common.py`.
+The images validated or corrected in the app are added to the images labelled by the active learning loop, and the model is trained for one more active learning cycle, always starting from the original active learning model `al_head.pt`. The new model is saved as `results/results_active_learning/al_head_retrained.pt` (overwritten at every run; `al_head.pt` is never overwritten) and its test metrics are compared with those of `al_head.pt`. The app currently uses this retrained model (`HEAD_PATH` in `copilot_common.py`); to go back to the original active learning model, point `HEAD_PATH` to `al_head.pt`.
 
 ---
 
@@ -168,7 +168,14 @@ The hybrid strategy beats random sampling with every oracle (10/10 seeds, Holm-c
 
 **Grad-CAM:** all models focus on the lesion (energy inside the lesion about 2 to 2.4 times the chance level, peak inside the lesion in 78–86% of the images). With the labels of the simulated dermatologists, the localisation gets worse as more images are labelled, which does not happen with correct labels.
 
-**Model used by the app:** final head of the run hybrid / perfect oracle / seed 0 (3715 labelled images), with macro F1 0.593, balanced accuracy 0.599, melanoma recall 0.591 and macro AUC 0.926.
+**Model used by the app:** the final head of the run hybrid / perfect oracle / seed 0 (3715 labelled images; macro F1 0.593, balanced accuracy 0.599, melanoma recall 0.591, macro AUC 0.926), retrained for one more active learning cycle with 21 decisions made in the app (19 distinct training images not yet labelled by the active learning loop; 6 predictions corrected by the clinician).
+
+| Model | Macro F1 | Balanced accuracy | Melanoma recall |
+|---|---|---|---|
+| Active learning head (`al_head.pt`) | 0.593 | 0.599 | 0.591 |
+| Retrained with the clinician's corrections (`al_head_retrained.pt`) | **0.614** | **0.610** | **0.610** |
+
+With so few new images, part of this gain is likely due to the extra training epochs of the new cycle and not only to the corrections themselves.
 
 More details, tables and figures are in the notebooks and in `results/`.
 

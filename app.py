@@ -1,10 +1,10 @@
 """
 Dermoscopy Copilot - Streamlit       
-Run (from the repository root): streamlit run app.py
-Prediction = final active learning model (al_head.pt), calibrated, with TTA x8 and the same calibration as referral.py.
+Run (from the repository root): streamlit run app.py (python -m streamlit run app.py also works)
+Prediction = active learning model retrained with the clinician's corrections (al_head_retrained.pt, HEAD_PATH in copilot_common.py), calibrated, with TTA x8 and the same calibration as referral.py.
 Heat map = CAM (closed formula of gradcam_eval.py) over the original view, for the class predicted with TTA
 (gradcam_eval.py picks the class from the original view only, so in borderline cases the class can differ).
-Prerequisite: results/results_active_learning/al_head.pt (export_al_head.py).
+Prerequisite: results/results_active_learning/al_head_retrained.pt (retrain_with_corrections.py, which starts from al_head.pt of export_al_head.py).
 """
 import csv
 import time
