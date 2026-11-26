@@ -170,14 +170,9 @@ The hybrid strategy beats random sampling with every oracle (10/10 seeds, Holm-c
 
 **Grad-CAM:** all models focus on the lesion (energy inside the lesion about 2 to 2.4 times the chance level, peak inside the lesion in 78–86% of the images). With the labels of the simulated dermatologists, the localisation gets worse as more images are labelled, which does not happen with correct labels.
 
-**Model used by the app:** the final head of the run hybrid / perfect oracle / seed 0 (3715 labelled images; macro F1 0.593, balanced accuracy 0.599, melanoma recall 0.591, macro AUC 0.926), retrained for one more active learning cycle with 21 decisions made in the app (19 distinct training images not yet labelled by the active learning loop; 6 predictions corrected by the clinician).
+**Model used by the app:** the final head of the run hybrid / perfect oracle / seed 0 (3715 labelled images; macro F1 0.593, balanced accuracy 0.599, melanoma recall 0.591, macro AUC 0.926), retrained for one more active learning cycle with the decisions made in the app.
 
-| Model | Macro F1 | Balanced accuracy | Melanoma recall |
-|---|---|---|---|
-| Active learning head (`al_head.pt`) | 0.593 | 0.599 | 0.591 |
-| Retrained with the clinician's corrections (`al_head_retrained.pt`) | **0.614** | **0.610** | **0.610** |
-
-With so few new images, part of this gain is likely due to the extra training epochs of the new cycle and not only to the corrections themselves.
+**Test of the app:** 19 training images not yet labelled by the active learning loop (about 3 per category) were reviewed in the app, with the true label taken from `splits/train.csv`. The model was right in 14 of the 19 images and wrong in 5, which were corrected. The 2 missed melanomas (predicted as `nv`) were both sent to the clinician by the referral rule; the other 3 errors (one `df` and two `akiec`) were predicted with high confidence (86–99.6%) and were not referred. These images were then used to retrain the model of the app; with so few images, this is a test of the feedback loop and not a measurable improvement of the model.
 
 More details, tables and figures are in the notebooks and in `results/`.
 
