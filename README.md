@@ -1,15 +1,15 @@
 ﻿# Dermoscopy Copilot
 
 **Course:** Human-Centered Artificial Intelligence (HCAI) · MSc in Biomedical Engineering · University of Coimbra
-· **Group 13:** Carolina Garrido, Sara Santos, Sara Seco
+· **Group 13:** Carolina Garrido, Sara Santos, Sara Sêco
 
 A human-centered decision-support tool for the classification of dermoscopic images into the 7 diagnostic categories of [HAM10000](https://www.kaggle.com/datasets/kmader/skin-cancer-mnist-ham10000) (`akiec`, `bcc`, `bkl`, `df`, `mel`, `nv`, `vasc`). The project combines:
 
 - **Active learning**, to reduce the number of images that dermatologists have to label;
 - **Human-in-the-loop annotation**, with a simulated panel of dermatologists who make realistic mistakes;
-- **Explainability**, with Grad-CAM heat maps checked against the lesion masks;
+- **Explainability**, with Grad-CAM heatmaps checked against the lesion masks;
 - **A referral rule**, which decides which cases are sent to the clinician and which are only supervised;
-- **A Streamlit app**, where the clinician sees the prediction, its confidence and the heat map, accepts or corrects it, and the corrections are used to retrain the model.
+- **A Streamlit app**, where the clinician sees the prediction, its confidence and the heatmap, accepts or corrects it, and the corrections can be used to retrain the model.
 
 The final decision always belongs to the clinician: the system is a decision-support tool, not an autonomous diagnostic tool.
 
@@ -24,7 +24,7 @@ The final decision always belongs to the clinician: the system is a decision-sup
 | 3. Passive baseline | Trains a linear layer on 100% of the labels, with class weights, early stopping, TTA and temperature scaling | `train_baseline.py` | `03_passive_baseline` |
 | 4. Active learning | Compares 5 query strategies (least confidence, margin, entropy, hybrid and random) from 10% to ~52% of the labels, with 10 seeds, statistical tests and a noisy oracle | `active_learning.py`, `al_results.py`, `al_stats.py`, `al_labels_to_target.py`, `al_final.py` | `04_active_learning` |
 | 5. Human-in-the-loop | Replaces the oracle with a simulated panel of 5 dermatologists (one dermatologist or majority vote of 3), measures annotation quality and cost, exports the final model and evaluates the referral rule | `annotators.py`, `al_hitl.py`, `hitl_extra_stats.py`, `export_al_head.py`, `referral.py` | `05_human_in_the_loop` |
-| 6. Explainability | Compares the Grad-CAM heat maps of the passive and active learning models with the lesion masks on the test set | `cam_metrics.py`, `gradcam_eval.py` | `06_gradcam` |
+| 6. Explainability | Compares the Grad-CAM heatmaps of the passive and active learning models with the lesion masks on the test set | `cam_metrics.py`, `gradcam_eval.py` | `06_gradcam` |
 | 7. Copilot app | Streamlit app with the final active learning model, and retraining with the clinician's corrections | `copilot_common.py`, `app.py`, `retrain_with_corrections.py` | `07_copilot_app` |
 
 The notebooks document each phase and load the saved results in `results/`, so they run in a few seconds without training anything. Each notebook has a `RETRAIN` / `RECOMPUTE` option to run the experiments again.
@@ -42,7 +42,7 @@ The notebooks document each phase and load the saved results in `results/`, so t
 ├── annotators.py                   # 5. simulated dermatologists and annotation quality metrics
 ├── al_hitl.py / hitl_extra_stats.py
 ├── export_al_head.py               #    final active learning model for the app
-├── referral.py                     #    referral rule (human in the loop / on the loop)
+├── referral.py                     #    referral rule (human-in-the-loop / human-on-the-loop)
 ├── cam_metrics.py / gradcam_eval.py  # 6. Grad-CAM vs lesion masks
 ├── copilot_common.py               # 7. code shared by the app and the retraining script
 ├── app.py                          #    Streamlit app
@@ -115,7 +115,7 @@ python gradcam_eval.py              # needs the images and the lesion masks
 streamlit run app.py
 ```
 
-The clinician uploads a dermoscopic image and sees the predicted class, its calibrated confidence, the probability of melanoma, the Grad-CAM heat map and the class probabilities. A case is **sent to the clinician** (*human in the loop*) when the confidence is below 80% or the probability of melanoma is at least 20%; otherwise the prediction is shown as a suggestion under supervision (*human on the loop*). The clinician then accepts or corrects the prediction, and every decision is saved in `app_data/feedback_log.csv`.
+The clinician uploads a dermoscopic image and sees the predicted category, its calibrated confidence, the probability of melanoma, the Grad-CAM heatmap and the category probabilities. A case is **sent to the clinician** (*human-in-the-loop*) when the confidence is below 80% (the highest threshold that refers less than half of the validation cases to the clinician) or the probability of melanoma is at least 20%; otherwise the prediction is shown as a suggestion under supervision (*human-on-the-loop*). The clinician then accepts or corrects the prediction, and every decision is saved in `app_data/feedback_log.csv`.
 
 **Retraining with the clinician's corrections:**
 
@@ -176,6 +176,6 @@ More details, tables and figures are in the notebooks and in `results/`.
 
 ## Limitations
 
-- The dermatologists of the human-in-the-loop experiments are **simulated**. Their accuracies (0.92 to 0.75) and error structure are modelling assumptions, not values from the literature, and their mistakes depend on the class of the image, not on how difficult the image is.
+- The dermatologists of the human-in-the-loop experiments are **simulated**. Their accuracies (0.92 to 0.75) and error structure are modelling assumptions, not values from the literature, and their mistakes depend on the category of the image, not on how difficult the image is.
 - The models are trained and evaluated only on HAM10000, with a single test set.
 - The app is a research prototype for the course and is **not a medical device**.
